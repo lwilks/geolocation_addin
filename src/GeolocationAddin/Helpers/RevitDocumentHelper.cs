@@ -31,6 +31,16 @@ namespace GeolocationAddin.Helpers
             return uiDoc.Document;
         }
 
+        public static void SaveDocumentAs(Document doc, string targetPath)
+        {
+            var saveAsOptions = new SaveAsOptions
+            {
+                OverwriteExistingFile = true,
+                MaximumBackups = 1
+            };
+            doc.SaveAs(targetPath, saveAsOptions);
+        }
+
         public static void CloseDocument(Document doc, bool save)
         {
             if (doc == null || !doc.IsValidObject)
@@ -38,9 +48,13 @@ namespace GeolocationAddin.Helpers
 
             try
             {
-                if (save && doc.IsModifiable)
+                if (save)
                 {
-                    var saveOptions = new SaveAsOptions { OverwriteExistingFile = true };
+                    var saveOptions = new SaveAsOptions
+                    {
+                        OverwriteExistingFile = true,
+                        MaximumBackups = 1
+                    };
                     doc.SaveAs(doc.PathName, saveOptions);
                 }
 

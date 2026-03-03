@@ -144,55 +144,40 @@ namespace GeolocationAddin.Core
 
             LogHelper.Info($"\n--- Processing: {linkInfo.InstanceName} -> {linkInfo.TargetFileName} ---");
 
-            // Step 1: Copy source file
-            try
-            {
-                linkInfo.TargetFilePath = FileCopyManager.CopyLinkedModel(
-                    linkInfo.SourceFilePath, linkInfo.TargetFileName, _config.OutputFolder);
-                result.CopySucceeded = true;
-            }
-            catch (Exception ex)
-            {
-                result.ErrorMessage = $"Copy failed: {ex.Message}";
-                LogHelper.Error(result.ErrorMessage);
-                return result;
-            }
+            // Ensure target filename has .rvt extension
+            var targetFileName = linkInfo.TargetFileName;
+            if (!targetFileName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase))
+                targetFileName += ".rvt";
+            linkInfo.TargetFilePath = Path.Combine(_config.OutputFolder, targetFileName);
 
-            // Step 2: Publish shared coordinates (Strategy A with transaction, fallback B)
-            bool coordsPublished = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
-
-            if (!coordsPublished)
-            {
-                LogHelper.Info("Strategy A failed, attempting Strategy B (transform-based)...");
-                LogHelper.Info("Strategy B will be applied during export step (when the copied model is opened).");
-            }
-
-            result.CoordinatesPublished = coordsPublished;
-
-            if (!coordsPublished)
-            {
-                // Don't return — continue to export step where we'll apply Strategy B
-                LogHelper.Info("Will attempt Strategy B when opening the copied model for export.");
-            }
-
-            // Step 3: Open copied model, apply Strategy B if needed, then export
             Document exportDoc = null;
             try
             {
+                // Step 1: Open source file from ACC Desktop Connector (detached from central)
+                // This replaces raw File.Copy, which preserved cloud worksharing metadata
+                // and produced files that Revit could not reopen (COleException 0x80004005).
+                LogHelper.Info($"Opening source (detached): {linkInfo.SourceFilePath}");
                 exportDoc = RevitDocumentHelper.OpenDocumentDetached(
-                    _uiApp, linkInfo.TargetFilePath);
+                    _uiApp, linkInfo.SourceFilePath);
+                LogHelper.Info("Source file opened successfully (detached).");
 
-                // Apply Strategy B (transform-based coordinates) if Strategy A failed
-                if (!coordsPublished)
-                {
-                    coordsPublished = CoordinatePublisher.PublishViaTransform(exportDoc, linkInfo.TotalTransform);
-                    result.CoordinatesPublished = coordsPublished;
+                // Step 2: SaveAs to target path — strips cloud central metadata, creates clean local file
+                LogHelper.Info($"SaveAs: {linkInfo.TargetFilePath}");
+                RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
+                result.CopySucceeded = true;
+                LogHelper.Info("SaveAs completed — clean local copy created.");
 
-                    if (!coordsPublished)
-                        LogHelper.Error("Strategy B also failed.");
-                }
+                // Step 3: Apply coordinates via Strategy B (transform-based)
+                // Strategy A (relink-publish-restore) is not used for ACC cloud models because
+                // Reload() does not reliably restore cloud link references.
+                result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
+                    exportDoc, linkInfo.TotalTransform);
 
-                var baseName = Path.GetFileNameWithoutExtension(linkInfo.TargetFileName);
+                if (!result.CoordinatesPublished)
+                    LogHelper.Error("Failed to apply coordinates (Strategy B).");
+
+                // Step 4: Export
+                var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
                     result.IfcExported = ModelExporter.ExportIfc(exportDoc, _config.IfcOutputFolder, baseName);
@@ -203,16 +188,19 @@ namespace GeolocationAddin.Core
                 if (_config.ExportSettings.ExportDwg)
                     result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
 
-                // Save if we applied coordinates via Strategy B
-                RevitDocumentHelper.CloseDocument(exportDoc, save: !coordsPublished ? false : true);
+                // Step 5: Save and close
+                RevitDocumentHelper.CloseDocument(exportDoc, save: true);
                 exportDoc = null;
             }
             catch (Exception ex)
             {
-                result.ErrorMessage = $"Export/open failed: {ex.Message}";
+                result.ErrorMessage = $"Processing failed: {ex.Message}";
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
-                    RevitDocumentHelper.CloseDocument(exportDoc, save: false);
+                {
+                    try { RevitDocumentHelper.CloseDocument(exportDoc, save: false); }
+                    catch { }
+                }
             }
 
             return result;
