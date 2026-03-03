@@ -55,8 +55,8 @@ namespace GeolocationAddin.Core
                     ExportScope = NavisworksExportScope.Model
                 };
 
-                bool exportResult = doc.Export(outputFolder, fileNameWithoutExtension, options);
-                LogHelper.Info($"NWC Export() returned: {exportResult}");
+                doc.Export(outputFolder, fileNameWithoutExtension, options);
+                LogHelper.Info("NWC Export() completed.");
 
                 // Search for the NWC file (exporter may vary naming)
                 var expectedPath = Path.Combine(outputFolder, fileNameWithoutExtension + ".nwc");
