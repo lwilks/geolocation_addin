@@ -44,12 +44,6 @@ namespace GeolocationAddin.Core
         {
             try
             {
-                if (!NavisworksExportOptions.IsExportAvailable())
-                {
-                    LogHelper.Error("Navisworks NWC exporter is not available. Install the NWC Export Utility.");
-                    return false;
-                }
-
                 var options = new NavisworksExportOptions
                 {
                     ExportScope = NavisworksExportScope.Model

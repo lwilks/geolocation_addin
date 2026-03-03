@@ -30,7 +30,8 @@ namespace GeolocationAddin.Core
                 LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");
 
                 // 3. Publish shared coordinates from site model to the link
-                siteDoc.PublishCoordinates(linkInfo.Instance);
+                var linkElementId = new LinkElementId(linkInfo.InstanceId);
+                siteDoc.PublishCoordinates(linkElementId);
 
                 LogHelper.Info($"Published coordinates to: {linkInfo.TargetFileName}");
 

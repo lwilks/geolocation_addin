@@ -55,7 +55,7 @@ namespace GeolocationAddin.Core
                 }
 
                 // 4. Group by RevitLinkType for coordinate publishing
-                var typeGroups = linkInfos.GroupBy(li => li.TypeId.IntegerValue);
+                var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
 
                 foreach (var group in typeGroups)
                 {
