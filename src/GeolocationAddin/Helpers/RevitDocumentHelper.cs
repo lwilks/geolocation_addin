@@ -39,13 +39,38 @@ namespace GeolocationAddin.Helpers
             var modelPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(region, projectGuid, modelGuid);
             var openOptions = new OpenOptions();
 
-            // Cloud models do not support DetachFromCentralOption with OpenDocumentFile.
-            // Instead, open normally and use SaveAs to create a standalone local copy.
+            // Cloud models require OpenAndActivateDocument (not Application.OpenDocumentFile)
+            // for detach to work. OpenDocumentFile rejects DetachFromCentralOption for cloud models.
+            openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
+
             var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
             LogHelper.Info($"Opening cloud model: region={region}, project={projectGuid}, model={modelGuid}");
-            return uiApp.Application.OpenDocumentFile(modelPath, openOptions);
+            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
+            return uiDoc.Document;
+        }
+
+        /// <summary>
+        /// Attempts to reactivate a document that is already open in the Revit session.
+        /// Used to switch the active document away from an export doc so it can be closed.
+        /// </summary>
+        public static void ActivateDocument(UIApplication uiApp, Document doc)
+        {
+            try
+            {
+                ModelPath modelPath;
+                if (doc.IsModelInCloud)
+                    modelPath = doc.GetCloudModelPath();
+                else
+                    modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(doc.PathName);
+
+                uiApp.OpenAndActivateDocument(modelPath, new OpenOptions(), false);
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Info($"Could not reactivate document: {ex.Message}");
+            }
         }
 
         public static void SaveDocumentAs(Document doc, string targetPath)

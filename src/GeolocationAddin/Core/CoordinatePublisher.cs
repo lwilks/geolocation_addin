@@ -64,18 +64,41 @@ namespace GeolocationAddin.Core
         }
 
         /// <summary>
-        /// Strategy B: Extract transform from the link instance and apply as project position
-        /// on the copied model. Numerically correct but doesn't establish full Revit coordinate linkage.
+        /// Strategy B: Extract transform from the link instance and combine with the site model's
+        /// survey position to compute absolute shared coordinates for the copied model.
         /// </summary>
-        public static bool PublishViaTransform(Document copiedDoc, Transform linkTransform)
+        public static bool PublishViaTransform(Document siteDoc, Document copiedDoc, Transform linkTransform)
         {
             try
             {
-                var origin = linkTransform.Origin;
-                var basisX = linkTransform.BasisX;
+                // Get the site model's survey position (where its internal origin sits in survey coords)
+                var siteLocation = siteDoc.ActiveProjectLocation;
+                var sitePos = siteLocation.GetProjectPosition(XYZ.Zero);
 
-                // Extract rotation angle from BasisX (angle from east in radians)
-                double angle = Math.Atan2(basisX.Y, basisX.X);
+                LogHelper.Info($"Site survey position: E={sitePos.EastWest:F4}, N={sitePos.NorthSouth:F4}, " +
+                               $"Elev={sitePos.Elevation:F4}, Angle={sitePos.Angle:F6} rad");
+
+                // Link offset relative to site model's internal origin (in feet)
+                var dx = linkTransform.Origin.X;
+                var dy = linkTransform.Origin.Y;
+                var dz = linkTransform.Origin.Z;
+
+                LogHelper.Info($"Link transform offset: dX={dx:F4}, dY={dy:F4}, dZ={dz:F4}");
+
+                // Rotate the link offset by the site's true north angle to get survey-aligned offset
+                double cosA = Math.Cos(sitePos.Angle);
+                double sinA = Math.Sin(sitePos.Angle);
+
+                double absoluteEasting = sitePos.EastWest + dx * cosA - dy * sinA;
+                double absoluteNorthing = sitePos.NorthSouth + dx * sinA + dy * cosA;
+                double absoluteElevation = sitePos.Elevation + dz;
+
+                // Link's own rotation relative to site
+                double linkRotation = Math.Atan2(linkTransform.BasisX.Y, linkTransform.BasisX.X);
+                double absoluteAngle = sitePos.Angle + linkRotation;
+
+                LogHelper.Info($"Absolute coordinates: E={absoluteEasting:F4}, N={absoluteNorthing:F4}, " +
+                               $"Elev={absoluteElevation:F4}, Angle={absoluteAngle:F6} rad");
 
                 using (var tx = new Transaction(copiedDoc, "Set Shared Coordinates"))
                 {
@@ -83,10 +106,10 @@ namespace GeolocationAddin.Core
 
                     var projectLocation = copiedDoc.ActiveProjectLocation;
                     var position = new ProjectPosition(
-                        origin.X,   // easting
-                        origin.Y,   // northing
-                        origin.Z,   // elevation
-                        angle        // angle from true north
+                        absoluteEasting,    // easting in feet
+                        absoluteNorthing,   // northing in feet
+                        absoluteElevation,  // elevation in feet
+                        absoluteAngle       // angle from true north
                     );
 
                     projectLocation.SetProjectPosition(XYZ.Zero, position);

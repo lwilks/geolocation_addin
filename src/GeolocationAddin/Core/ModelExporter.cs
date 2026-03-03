@@ -44,13 +44,21 @@ namespace GeolocationAddin.Core
         {
             try
             {
+                if (!OptionalFunctionalityUtils.IsNavisworksExporterAvailable())
+                {
+                    LogHelper.Error("NWC export unavailable — Navisworks NWC Export Utility is not installed.");
+                    return false;
+                }
+
                 var options = new NavisworksExportOptions
                 {
                     ExportScope = NavisworksExportScope.Model
                 };
 
-                doc.Export(outputFolder, fileNameWithoutExtension, options);
+                bool exportResult = doc.Export(outputFolder, fileNameWithoutExtension, options);
+                LogHelper.Info($"NWC Export() returned: {exportResult}");
 
+                // Search for the NWC file (exporter may vary naming)
                 var expectedPath = Path.Combine(outputFolder, fileNameWithoutExtension + ".nwc");
                 if (File.Exists(expectedPath))
                 {
@@ -58,7 +66,20 @@ namespace GeolocationAddin.Core
                     return true;
                 }
 
-                LogHelper.Error("NWC export completed but file not found.");
+                // Search with wildcard in case of naming variation
+                var files = Directory.GetFiles(outputFolder, fileNameWithoutExtension + "*.nwc");
+                if (files.Length > 0)
+                {
+                    LogHelper.Info($"NWC exported: {files[0]}");
+                    return true;
+                }
+
+                // Log all NWC files in output folder for diagnostics
+                var allNwc = Directory.GetFiles(outputFolder, "*.nwc");
+                LogHelper.Error($"NWC export completed but file not found. NWC files in folder: {allNwc.Length}");
+                foreach (var f in allNwc)
+                    LogHelper.Info($"  NWC file: {Path.GetFileName(f)}");
+
                 return false;
             }
             catch (Exception ex)

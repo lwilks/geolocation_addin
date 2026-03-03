@@ -66,13 +66,40 @@ namespace GeolocationAddin.Core
             // 4. Group by RevitLinkType for coordinate publishing
             var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
 
+            // Cloud models are opened with OpenAndActivateDocument (becomes active doc).
+            // We can't close the active doc from the API, so we defer closing until
+            // the next ProcessLink opens a new doc (switching the active doc away).
+            Document pendingCloseDoc = null;
+
             foreach (var group in typeGroups)
             {
                 foreach (var linkInfo in group)
                 {
-                    var result = ProcessLink(siteDoc, linkInfo);
+                    Document previousPending = pendingCloseDoc;
+                    pendingCloseDoc = null;
+
+                    var result = ProcessLink(siteDoc, linkInfo, out Document exportDoc);
                     results.Add(result);
+
+                    // ProcessLink opened a new doc (now active), so the previous one
+                    // is no longer active and can be closed.
+                    if (previousPending != null)
+                    {
+                        try { previousPending.Close(false); }
+                        catch (Exception ex) { LogHelper.Info($"Deferred close failed: {ex.Message}"); }
+                    }
+
+                    if (exportDoc != null)
+                        pendingCloseDoc = exportDoc;
                 }
+            }
+
+            // Close the last export doc by switching back to the site doc first
+            if (pendingCloseDoc != null)
+            {
+                RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+                try { pendingCloseDoc.Close(false); }
+                catch (Exception ex) { LogHelper.Info($"Final close failed: {ex.Message}"); }
             }
 
             // 5. Show summary
@@ -197,8 +224,9 @@ namespace GeolocationAddin.Core
             return linkInfos;
         }
 
-        private ProcessingResult ProcessLink(Document siteDoc, LinkInstanceInfo linkInfo)
+        private ProcessingResult ProcessLink(Document siteDoc, LinkInstanceInfo linkInfo, out Document openedDoc)
         {
+            openedDoc = null;
             var result = new ProcessingResult
             {
                 LinkName = linkInfo.InstanceName,
@@ -213,18 +241,17 @@ namespace GeolocationAddin.Core
             linkInfo.TargetFilePath = Path.Combine(_config.OutputFolder, targetFileName);
 
             Document exportDoc = null;
+            bool isCloudDoc = false;
             try
             {
                 // Step 1: Open the model (detached from central).
-                // ACC cloud models must be opened via cloud GUIDs, not filesystem paths.
-                // ConvertCloudGUIDsToCloudPath creates a proper cloud ModelPath from
-                // the project GUID, model GUID, and region extracted from external resource refs.
                 if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
                 {
                     LogHelper.Info("Opening via cloud GUIDs (detached)...");
                     exportDoc = RevitDocumentHelper.OpenCloudDocumentDetached(
                         _uiApp, linkInfo.CloudRegion,
                         linkInfo.CloudProjectGuid.Value, linkInfo.CloudModelGuid.Value);
+                    isCloudDoc = true;
                     LogHelper.Info("Cloud model opened successfully (detached).");
                 }
                 else
@@ -243,8 +270,9 @@ namespace GeolocationAddin.Core
                 LogHelper.Info("SaveAs completed — clean local copy created.");
 
                 // Step 3: Apply coordinates via Strategy B (transform-based)
+                // Pass siteDoc so we can add the site model's survey position offsets
                 result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
-                    exportDoc, linkInfo.TotalTransform);
+                    siteDoc, exportDoc, linkInfo.TotalTransform);
 
                 if (!result.CoordinatesPublished)
                     LogHelper.Error("Failed to apply coordinates (Strategy B).");
@@ -261,9 +289,21 @@ namespace GeolocationAddin.Core
                 if (_config.ExportSettings.ExportDwg)
                     result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
 
-                // Step 5: Save and close
-                RevitDocumentHelper.CloseDocument(exportDoc, save: true);
-                exportDoc = null;
+                // Step 5: Save the document
+                RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
+                LogHelper.Info("Final save completed.");
+
+                // Cloud docs opened via OpenAndActivateDocument become the active doc
+                // and can't be closed from the API. Defer close to the caller.
+                if (isCloudDoc)
+                {
+                    openedDoc = exportDoc;
+                }
+                else
+                {
+                    exportDoc.Close(false);
+                    exportDoc = null;
+                }
             }
             catch (Exception ex)
             {
@@ -271,8 +311,11 @@ namespace GeolocationAddin.Core
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
                 {
-                    try { RevitDocumentHelper.CloseDocument(exportDoc, save: false); }
-                    catch { }
+                    // For cloud docs that became active, defer close
+                    if (isCloudDoc)
+                        openedDoc = exportDoc;
+                    else
+                        try { exportDoc.Close(false); } catch { }
                 }
             }
 
