@@ -109,7 +109,7 @@ namespace GeolocationAddin.Core
                 {
                     tx.Start();
 
-                    var options = new DWGExportOptions();
+                    var options = new DWGExportOptions { SharedCoords = true };
                     var viewIds = new System.Collections.Generic.List<ElementId> { view3d.Id };
 
                     doc.Export(outputFolder, fileNameWithoutExtension, viewIds, options);
