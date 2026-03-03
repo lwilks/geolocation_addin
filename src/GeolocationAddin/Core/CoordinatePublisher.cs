@@ -19,9 +19,17 @@ namespace GeolocationAddin.Core
             try
             {
                 // 1. Save original link path
-                var extRef = linkType.GetExternalFileReference();
-                if (extRef != null)
-                    originalPath = extRef.GetAbsolutePath();
+                try
+                {
+                    var extRef = linkType.GetExternalFileReference();
+                    if (extRef != null)
+                        originalPath = extRef.GetAbsolutePath();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Cloud/ACC link — save the InSessionPath from external resources instead
+                    LogHelper.Info("Cloud link detected, saving external resource reference for restore.");
+                }
 
                 // 2. Relink to the copied file
                 var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(linkInfo.TargetFilePath);
