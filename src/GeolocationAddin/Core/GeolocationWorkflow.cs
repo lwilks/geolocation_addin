@@ -47,16 +47,20 @@ namespace GeolocationAddin.Core
 
             LogHelper.Info($"Found {linkInstances.Count} link instances in site model.");
 
+            // Log all link instance names for debugging
+            foreach (var li in linkInstances)
+            {
+                try { LogHelper.Info($"  Link instance: \"{li.Name}\""); }
+                catch { }
+            }
+
             // 3. Build link info list
             var linkInfos = BuildLinkInfoList(siteDoc, linkInstances);
-            LogHelper.Info($"Matched {linkInfos.Count} link instances to CSV mapping entries.");
+            LogHelper.Info($"Matched {linkInfos.Count} of {linkInstances.Count} link instances to CSV mapping entries.");
 
             if (linkInfos.Count == 0)
             {
-                TaskDialog.Show("Geolocation",
-                    "No link instances matched the CSV mapping.\n\n" +
-                    "Check that LinkInstanceName values in the CSV match the link instance names in Revit.");
-                return;
+                LogHelper.Info("No link instances matched. Continuing to show summary.");
             }
 
             // 4. Group by RevitLinkType for coordinate publishing
@@ -223,23 +227,37 @@ namespace GeolocationAddin.Core
         private void ShowSummary(List<ProcessingResult> results)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"Processed {results.Count} link(s):\n");
 
-            int succeeded = 0;
-            int failed = 0;
-
-            foreach (var r in results)
+            if (results.Count == 0)
             {
-                sb.AppendLine($"  {r.TargetFileName}: {r.Summary}");
+                sb.AppendLine("No links were processed.");
+                sb.AppendLine();
+                sb.AppendLine("Check the log file for details on link discovery and path resolution:");
+            }
+            else
+            {
+                sb.AppendLine($"Processed {results.Count} link(s):\n");
 
-                if (r.CopySucceeded && r.CoordinatesPublished)
-                    succeeded++;
-                else
-                    failed++;
+                int succeeded = 0;
+                int failed = 0;
+
+                foreach (var r in results)
+                {
+                    sb.AppendLine($"  {r.TargetFileName}: {r.Summary}");
+
+                    if (r.CopySucceeded && r.CoordinatesPublished)
+                        succeeded++;
+                    else
+                        failed++;
+                }
+
+                sb.AppendLine();
+                sb.AppendLine($"Succeeded: {succeeded}  |  Failed: {failed}");
+                sb.AppendLine();
+                sb.AppendLine("Log file:");
             }
 
-            sb.AppendLine();
-            sb.AppendLine($"Succeeded: {succeeded}  |  Failed: {failed}");
+            sb.AppendLine(LogHelper.LogFilePath);
 
             LogHelper.Info(sb.ToString());
             TaskDialog.Show("Geolocation — Results", sb.ToString());

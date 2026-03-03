@@ -9,7 +9,8 @@ namespace GeolocationAddin.Helpers
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "GeolocationAddin");
 
-        private static readonly string LogFile = Path.Combine(LogDir, "geolocation.log");
+        public static readonly string LogFilePath = Path.Combine(LogDir, "geolocation.log");
+        private static readonly string LogFile = LogFilePath;
 
         public static void Info(string message)
         {
