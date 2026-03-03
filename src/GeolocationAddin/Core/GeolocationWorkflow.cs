@@ -186,7 +186,7 @@ namespace GeolocationAddin.Core
             try
             {
                 exportDoc = RevitDocumentHelper.OpenDocumentDetached(
-                    _uiApp.Application, linkInfo.TargetFilePath);
+                    _uiApp, linkInfo.TargetFilePath);
 
                 var baseName = Path.GetFileNameWithoutExtension(linkInfo.TargetFileName);
 
