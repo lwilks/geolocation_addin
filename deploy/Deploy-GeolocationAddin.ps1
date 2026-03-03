@@ -50,24 +50,24 @@ $OutputDir = "$RepoRoot\src\GeolocationAddin\bin\Release"
 # --- Step 3: Deploy to Revit addins folder ---
 Write-Host "[3/4] Deploying to Revit 2024..." -ForegroundColor Yellow
 
-if (-not (Test-Path $AddinDir)) {
-    New-Item -ItemType Directory -Path $AddinDir -Force | Out-Null
-}
+# if (-not (Test-Path $AddinDir)) {
+    # New-Item -ItemType Directory -Path $AddinDir -Force | Out-Null
+# }
 
-$filesToCopy = @(
-    "$OutputDir\GeolocationAddin.dll",
-    "$OutputDir\GeolocationAddin.addin",
-    "$OutputDir\Newtonsoft.Json.dll"
-)
+# $filesToCopy = @(
+    # "$OutputDir\GeolocationAddin.dll",
+    # "$OutputDir\GeolocationAddin.addin",
+    # "$OutputDir\Newtonsoft.Json.dll"
+# )
 
-foreach ($file in $filesToCopy) {
-    if (Test-Path $file) {
-        Copy-Item $file -Destination $AddinDir -Force
-        Write-Host "  Copied: $(Split-Path $file -Leaf)" -ForegroundColor Green
-    } else {
-        Write-Host "  WARNING: Not found: $file" -ForegroundColor Red
-    }
-}
+# foreach ($file in $filesToCopy) {
+    # if (Test-Path $file) {
+        # Copy-Item $file -Destination $AddinDir -Force
+        # Write-Host "  Copied: $(Split-Path $file -Leaf)" -ForegroundColor Green
+    # } else {
+        # Write-Host "  WARNING: Not found: $file" -ForegroundColor Red
+    # }
+# }
 
 # --- Step 4: Create config directory with samples ---
 Write-Host "[4/4] Setting up config directory..." -ForegroundColor Yellow
