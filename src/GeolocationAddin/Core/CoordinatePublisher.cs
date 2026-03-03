@@ -25,7 +25,7 @@ namespace GeolocationAddin.Core
                     if (extRef != null)
                         originalPath = extRef.GetAbsolutePath();
                 }
-                catch (InvalidOperationException)
+                catch (Exception)
                 {
                     // Cloud/ACC link — save the InSessionPath from external resources instead
                     LogHelper.Info("Cloud link detected, saving external resource reference for restore.");

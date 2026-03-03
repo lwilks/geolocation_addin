@@ -26,10 +26,10 @@ namespace GeolocationAddin.Core
                     }
                 }
             }
-            catch (InvalidOperationException)
+            catch (Exception ex)
             {
                 // "This Element does not represent an external file" — cloud/ACC link
-                LogHelper.Info($"Link type '{linkType.Name}' is not a traditional file link, trying external resource path...");
+                LogHelper.Info($"Link type '{linkType.Name}' is not a traditional file link ({ex.Message}), trying external resource path...");
             }
 
             // Strategy 2: External resource references (ACC/BIM360 via Desktop Connector)

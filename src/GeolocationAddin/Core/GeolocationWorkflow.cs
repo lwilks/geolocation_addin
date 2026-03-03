@@ -81,42 +81,50 @@ namespace GeolocationAddin.Core
 
             foreach (var instance in instances)
             {
-                var instanceName = instance.Name;
-                var targetName = _mapping.ConsumeTargetName(instanceName);
-
-                if (targetName == null)
+                string instanceName = null;
+                try
                 {
-                    LogHelper.Info($"Skipping unmapped link: {instanceName}");
-                    continue;
+                    instanceName = instance.Name;
+                    var targetName = _mapping.ConsumeTargetName(instanceName);
+
+                    if (targetName == null)
+                    {
+                        LogHelper.Info($"Skipping unmapped link: {instanceName}");
+                        continue;
+                    }
+
+                    var typeId = instance.GetTypeId();
+                    var linkType = siteDoc.GetElement(typeId) as RevitLinkType;
+                    if (linkType == null)
+                    {
+                        LogHelper.Error($"Could not resolve RevitLinkType for: {instanceName}");
+                        continue;
+                    }
+
+                    var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType);
+                    if (sourcePath == null)
+                    {
+                        LogHelper.Error($"Could not resolve source file path for: {instanceName}");
+                        continue;
+                    }
+
+                    linkInfos.Add(new LinkInstanceInfo
+                    {
+                        Instance = instance,
+                        LinkType = linkType,
+                        InstanceId = instance.Id,
+                        TypeId = typeId,
+                        InstanceName = instanceName,
+                        SourceFilePath = sourcePath,
+                        TargetFileName = targetName,
+                        TargetFilePath = Path.Combine(_config.OutputFolder, targetName),
+                        TotalTransform = instance.GetTotalTransform()
+                    });
                 }
-
-                var typeId = instance.GetTypeId();
-                var linkType = siteDoc.GetElement(typeId) as RevitLinkType;
-                if (linkType == null)
+                catch (Exception ex)
                 {
-                    LogHelper.Error($"Could not resolve RevitLinkType for: {instanceName}");
-                    continue;
+                    LogHelper.Error($"Error processing link '{instanceName ?? "unknown"}': {ex}");
                 }
-
-                var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType);
-                if (sourcePath == null)
-                {
-                    LogHelper.Error($"Could not resolve source file path for: {instanceName}");
-                    continue;
-                }
-
-                linkInfos.Add(new LinkInstanceInfo
-                {
-                    Instance = instance,
-                    LinkType = linkType,
-                    InstanceId = instance.Id,
-                    TypeId = typeId,
-                    InstanceName = instanceName,
-                    SourceFilePath = sourcePath,
-                    TargetFileName = targetName,
-                    TargetFilePath = Path.Combine(_config.OutputFolder, targetName),
-                    TotalTransform = instance.GetTotalTransform()
-                });
             }
 
             return linkInfos;
