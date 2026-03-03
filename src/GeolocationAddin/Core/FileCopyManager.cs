@@ -111,6 +111,31 @@ namespace GeolocationAddin.Core
             LogHelper.Info($"Copying: {Path.GetFileName(sourceFilePath)} -> {targetFileName}");
             File.Copy(sourceFilePath, targetPath, overwrite: true);
 
+            // Strip cloud worksharing metadata from the copy using TransmissionData.
+            // Raw copies of ACC cloud models retain the cloud central reference,
+            // causing Revit to throw COleException 0x80004005 when opening.
+            // Setting IsTransmitted = true tells Revit to treat the file as a
+            // standalone transmitted copy (like eTransmit), bypassing cloud sync.
+            try
+            {
+                var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(targetPath);
+                var transData = TransmissionData.ReadTransmissionData(targetModelPath);
+                if (transData != null)
+                {
+                    transData.IsTransmitted = true;
+                    TransmissionData.WriteTransmissionData(targetModelPath, transData);
+                    LogHelper.Info("Marked copy as transmitted (stripped cloud central reference).");
+                }
+                else
+                {
+                    LogHelper.Info("TransmissionData is null — file may not be workshared.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Info($"TransmissionData cleanup skipped ({ex.Message}).");
+            }
+
             return targetPath;
         }
     }
