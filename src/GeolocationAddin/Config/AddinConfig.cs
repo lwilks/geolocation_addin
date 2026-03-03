@@ -10,6 +10,9 @@ namespace GeolocationAddin.Config
         [JsonProperty("csvMappingPath")]
         public string CsvMappingPath { get; set; }
 
+        [JsonProperty("linkSourceFolder")]
+        public string LinkSourceFolder { get; set; }
+
         [JsonProperty("outputFolder")]
         public string OutputFolder { get; set; }
 

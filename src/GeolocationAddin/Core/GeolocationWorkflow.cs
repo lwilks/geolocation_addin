@@ -105,7 +105,7 @@ namespace GeolocationAddin.Core
                         continue;
                     }
 
-                    var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType);
+                    var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType, _config.LinkSourceFolder);
                     if (sourcePath == null)
                     {
                         LogHelper.Error($"Could not resolve source file path for: {instanceName}");

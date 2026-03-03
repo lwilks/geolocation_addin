@@ -1,6 +1,7 @@
 {
   "siteModelPath": "C:\\Users\\YourUser\\DC\\YourOrg\\YourProject\\Site\\SiteModel.rvt",
   "csvMappingPath": "C:\\ProgramData\\GeolocationAddin\\mapping.csv",
+  "linkSourceFolder": "C:\\ACC Sync\\ACCDocs\\YourOrg\\YourProject",
   "outputFolder": "C:\\GeolocationOutput\\Models",
   "ifcOutputFolder": "C:\\GeolocationOutput\\IFC",
   "nwcOutputFolder": "C:\\GeolocationOutput\\NWC",

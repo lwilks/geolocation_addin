@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Autodesk.Revit.DB;
 using GeolocationAddin.Helpers;
 
@@ -9,8 +7,10 @@ namespace GeolocationAddin.Core
 {
     public static class FileCopyManager
     {
-        public static string ResolveLinkFilePath(RevitLinkType linkType)
+        public static string ResolveLinkFilePath(RevitLinkType linkType, string linkSourceFolder)
         {
+            var typeName = linkType.Name;
+
             // Strategy 1: Traditional external file reference (local file links)
             try
             {
@@ -22,77 +22,77 @@ namespace GeolocationAddin.Core
                     {
                         var path = ModelPathUtils.ConvertModelPathToUserVisiblePath(modelPath);
                         if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                        {
+                            LogHelper.Info($"Resolved via external file reference: {path}");
                             return path;
+                        }
                     }
                 }
             }
             catch (Exception ex)
             {
-                // "This Element does not represent an external file" — cloud/ACC link
-                LogHelper.Info($"Link type '{linkType.Name}' is not a traditional file link ({ex.Message}), trying external resource path...");
+                LogHelper.Info($"Link type '{typeName}' is not a traditional file link ({ex.Message})");
             }
 
             // Strategy 2: External resource references (ACC/BIM360 via Desktop Connector)
             try
             {
                 var extResources = linkType.GetExternalResourceReferences();
-                if (extResources != null)
+                if (extResources != null && extResources.Count > 0)
                 {
+                    LogHelper.Info($"Found {extResources.Count} external resource reference(s) for '{typeName}'");
                     foreach (var kvp in extResources)
                     {
                         var resourceRef = kvp.Value;
-                        var versionPath = resourceRef.InSessionPath;
-                        if (!string.IsNullOrEmpty(versionPath) && File.Exists(versionPath))
-                        {
-                            LogHelper.Info($"Resolved via external resource InSessionPath: {versionPath}");
-                            return versionPath;
-                        }
 
-                        // Try the server path which Desktop Connector maps to a local path
+                        var inSessionPath = resourceRef.InSessionPath;
+                        LogHelper.Info($"  InSessionPath: '{inSessionPath}'");
+                        if (!string.IsNullOrEmpty(inSessionPath) && File.Exists(inSessionPath))
+                            return inSessionPath;
+
                         var refMap = resourceRef.GetReferenceInformation();
                         if (refMap != null)
                         {
                             foreach (var info in refMap)
                             {
+                                LogHelper.Info($"  RefInfo: {info.Key} = '{info.Value}'");
                                 if (File.Exists(info.Value))
-                                {
-                                    LogHelper.Info($"Resolved via resource reference info: {info.Value}");
                                     return info.Value;
-                                }
                             }
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Error($"External resource resolution failed: {ex.Message}");
-            }
-
-            // Strategy 3: Try to find the file via the link type name in known Desktop Connector paths
-            try
-            {
-                var typeName = linkType.Name;
-                // Strip ".rvt" suffix if present for searching
-                var searchName = typeName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase)
-                    ? typeName : typeName + ".rvt";
-
-                var dcRoot = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "DC");
-
-                if (Directory.Exists(dcRoot))
+                else
                 {
-                    var matches = Directory.GetFiles(dcRoot, searchName, SearchOption.AllDirectories);
-                    if (matches.Length > 0)
-                    {
-                        LogHelper.Info($"Resolved via Desktop Connector search: {matches[0]}");
-                        return matches[0];
-                    }
+                    LogHelper.Info($"No external resource references found for '{typeName}'");
                 }
             }
             catch (Exception ex)
             {
-                LogHelper.Error($"Desktop Connector path search failed: {ex.Message}");
+                LogHelper.Error($"External resource resolution failed for '{typeName}': {ex.Message}");
+            }
+
+            // Strategy 3: Search linkSourceFolder from config
+            if (!string.IsNullOrEmpty(linkSourceFolder) && Directory.Exists(linkSourceFolder))
+            {
+                try
+                {
+                    var searchName = typeName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase)
+                        ? typeName : typeName + ".rvt";
+
+                    LogHelper.Info($"Searching '{linkSourceFolder}' for '{searchName}'...");
+                    var matches = Directory.GetFiles(linkSourceFolder, searchName, SearchOption.AllDirectories);
+                    if (matches.Length > 0)
+                    {
+                        LogHelper.Info($"Resolved via linkSourceFolder search: {matches[0]}");
+                        return matches[0];
+                    }
+                    LogHelper.Info($"No match found in linkSourceFolder for '{searchName}'");
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Error($"linkSourceFolder search failed: {ex.Message}");
+                }
             }
 
             return null;
@@ -103,7 +103,6 @@ namespace GeolocationAddin.Core
             if (!File.Exists(sourceFilePath))
                 throw new FileNotFoundException($"Source linked model not found: {sourceFilePath}");
 
-            // Ensure target has .rvt extension
             if (!targetFileName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase))
                 targetFileName += ".rvt";
 
