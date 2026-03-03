@@ -10,5 +10,10 @@
     "exportIfc": true,
     "exportNwc": true,
     "exportDwg": true
+  },
+  "fuzzyMatchSettings": {
+    "enabled": true,
+    "tokenOverlapThreshold": 0.5,
+    "levenshteinThreshold": 0.4
   }
 }
