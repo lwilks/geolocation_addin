@@ -32,6 +32,9 @@ bld/
 config/config.json
 config/mapping.csv
 
+## Installer output
+installer/Output/
+
 ## OS
 .DS_Store
 Thumbs.db
