@@ -4,60 +4,51 @@
     Deploys the Geolocation Addin for Revit 2024.
 
 .DESCRIPTION
-    Clones/pulls the private GitHub repo, builds the solution, and deploys
-    the addin DLL, manifest, and sample config to the correct locations.
+    Builds the solution from the local repo and deploys the addin DLL,
+    manifest, and sample config to the correct locations.
 
-.PARAMETER RepoUrl
-    URL of the private GitHub repository. Defaults to the configured repo.
-
-.PARAMETER Branch
-    Branch to build from. Defaults to 'main'.
+    Run from within a cloned copy of the repo:
+      git clone https://github.com/lwilks/geolocation_addin.git
+      cd geolocation_addin\deploy
+      .\Deploy-GeolocationAddin.ps1
 #>
-
-param(
-    [string]$RepoUrl = "https://github.com/YOUR_ORG/geolocation_addin.git",
-    [string]$Branch = "main"
-)
 
 $ErrorActionPreference = "Stop"
 
+# --- Resolve repo root from script location ---
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$RepoRoot = Split-Path -Parent $ScriptDir
+
+if (-not (Test-Path "$RepoRoot\GeolocationAddin.sln")) {
+    Write-Host "ERROR: Cannot find GeolocationAddin.sln in $RepoRoot" -ForegroundColor Red
+    Write-Host "Make sure you are running this script from within the cloned repo." -ForegroundColor Red
+    exit 1
+}
+
 # --- Paths ---
-$BuildDir = "$env:TEMP\GeolocationAddin_Build"
 $AddinDir = "$env:APPDATA\Autodesk\Revit\Addins\2024"
 $ConfigDir = "C:\ProgramData\GeolocationAddin"
 
 Write-Host "=== Geolocation Addin Deployment ===" -ForegroundColor Cyan
+Write-Host "  Repo: $RepoRoot" -ForegroundColor Gray
 Write-Host ""
 
-# --- Step 1: Clone or pull ---
-if (Test-Path "$BuildDir\.git") {
-    Write-Host "[1/5] Updating existing repo..." -ForegroundColor Yellow
-    Push-Location $BuildDir
-    git checkout $Branch 2>$null
-    git pull origin $Branch
-    Pop-Location
-} else {
-    Write-Host "[1/5] Cloning repository..." -ForegroundColor Yellow
-    if (Test-Path $BuildDir) { Remove-Item $BuildDir -Recurse -Force }
-    git clone --branch $Branch $RepoUrl $BuildDir
-}
-
-# --- Step 2: Restore NuGet packages ---
-Write-Host "[2/5] Restoring NuGet packages..." -ForegroundColor Yellow
-Push-Location $BuildDir
+# --- Step 1: Restore NuGet packages ---
+Write-Host "[1/4] Restoring NuGet packages..." -ForegroundColor Yellow
+Push-Location $RepoRoot
 dotnet restore GeolocationAddin.sln
 Pop-Location
 
-# --- Step 3: Build ---
-Write-Host "[3/5] Building solution (Release)..." -ForegroundColor Yellow
-Push-Location $BuildDir
+# --- Step 2: Build ---
+Write-Host "[2/4] Building solution (Release)..." -ForegroundColor Yellow
+Push-Location $RepoRoot
 dotnet build GeolocationAddin.sln -c Release --no-restore
 Pop-Location
 
-$OutputDir = "$BuildDir\src\GeolocationAddin\bin\Release"
+$OutputDir = "$RepoRoot\src\GeolocationAddin\bin\Release"
 
-# --- Step 4: Deploy to Revit addins folder ---
-Write-Host "[4/5] Deploying to Revit 2024..." -ForegroundColor Yellow
+# --- Step 3: Deploy to Revit addins folder ---
+Write-Host "[3/4] Deploying to Revit 2024..." -ForegroundColor Yellow
 
 if (-not (Test-Path $AddinDir)) {
     New-Item -ItemType Directory -Path $AddinDir -Force | Out-Null
@@ -78,8 +69,8 @@ foreach ($file in $filesToCopy) {
     }
 }
 
-# --- Step 5: Create config directory with samples ---
-Write-Host "[5/5] Setting up config directory..." -ForegroundColor Yellow
+# --- Step 4: Create config directory with samples ---
+Write-Host "[4/4] Setting up config directory..." -ForegroundColor Yellow
 
 if (-not (Test-Path $ConfigDir)) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
@@ -89,14 +80,14 @@ $configFile = "$ConfigDir\config.json"
 $mappingFile = "$ConfigDir\mapping.csv"
 
 if (-not (Test-Path $configFile)) {
-    Copy-Item "$BuildDir\config\config.sample.json" -Destination $configFile
+    Copy-Item "$RepoRoot\config\config.sample.json" -Destination $configFile
     Write-Host "  Created sample config.json" -ForegroundColor Green
 } else {
     Write-Host "  config.json already exists, skipping" -ForegroundColor DarkGray
 }
 
 if (-not (Test-Path $mappingFile)) {
-    Copy-Item "$BuildDir\config\mapping.sample.csv" -Destination $mappingFile
+    Copy-Item "$RepoRoot\config\mapping.sample.csv" -Destination $mappingFile
     Write-Host "  Created sample mapping.csv" -ForegroundColor Green
 } else {
     Write-Host "  mapping.csv already exists, skipping" -ForegroundColor DarkGray
