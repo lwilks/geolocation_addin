@@ -31,9 +31,10 @@ namespace GeolocationAddin.Helpers
             return uiDoc.Document;
         }
 
-        public static Document OpenCloudDocumentDetached(UIApplication uiApp, Guid projectGuid, Guid modelGuid)
+        public static Document OpenCloudDocumentDetached(UIApplication uiApp, string cloudPath)
         {
-            var cloudPath = ModelPathUtils.ConvertCloudPath(projectGuid, modelGuid);
+            // Convert the Autodesk Docs:// path to a ModelPath that Revit can open
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(cloudPath);
             var openOptions = new OpenOptions();
 
             openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
@@ -41,8 +42,8 @@ namespace GeolocationAddin.Helpers
             var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
-            LogHelper.Info($"Opening cloud model — project: {projectGuid}, model: {modelGuid}");
-            var uiDoc = uiApp.OpenAndActivateDocument(cloudPath, openOptions, false);
+            LogHelper.Info($"Opening cloud model: {cloudPath}");
+            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
             return uiDoc.Document;
         }
 

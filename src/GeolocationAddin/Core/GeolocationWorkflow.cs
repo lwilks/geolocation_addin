@@ -120,7 +120,7 @@ namespace GeolocationAddin.Core
                         TotalTransform = instance.GetTotalTransform()
                     };
 
-                    // Extract cloud GUIDs from external resource references
+                    // Extract cloud InSessionPath from external resource references
                     try
                     {
                         var extResources = linkType.GetExternalResourceReferences();
@@ -128,14 +128,11 @@ namespace GeolocationAddin.Core
                         {
                             foreach (var kvp in extResources)
                             {
-                                var refMap = kvp.Value.GetReferenceInformation();
-                                if (refMap != null)
+                                var inSessionPath = kvp.Value.InSessionPath;
+                                if (!string.IsNullOrEmpty(inSessionPath))
                                 {
-                                    string projId, modId;
-                                    if (refMap.TryGetValue("LinkedModelProjectId", out projId))
-                                        info.CloudProjectGuid = Guid.Parse(projId);
-                                    if (refMap.TryGetValue("LinkedModelModelId", out modId))
-                                        info.CloudModelGuid = Guid.Parse(modId);
+                                    info.CloudInSessionPath = inSessionPath;
+                                    LogHelper.Info($"Cloud path for '{instanceName}': {inSessionPath}");
                                 }
                                 break;
                             }
@@ -143,16 +140,12 @@ namespace GeolocationAddin.Core
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.Info($"Could not extract cloud GUIDs for '{instanceName}': {ex.Message}");
+                        LogHelper.Info($"Could not extract cloud path for '{instanceName}': {ex.Message}");
                     }
 
-                    if (info.CloudProjectGuid.HasValue && info.CloudModelGuid.HasValue)
+                    if (string.IsNullOrEmpty(info.CloudInSessionPath) && sourcePath == null)
                     {
-                        LogHelper.Info($"Cloud GUIDs for '{instanceName}': project={info.CloudProjectGuid}, model={info.CloudModelGuid}");
-                    }
-                    else if (sourcePath == null)
-                    {
-                        LogHelper.Error($"No cloud GUIDs and no source path for: {instanceName}");
+                        LogHelper.Error($"No cloud path and no source file path for: {instanceName}");
                         continue;
                     }
 
@@ -185,17 +178,15 @@ namespace GeolocationAddin.Core
             Document exportDoc = null;
             try
             {
-                // Step 1: Open the cloud model via its cloud path (detached from central).
+                // Step 1: Open the model (detached from central).
                 // ACC Desktop Connector files are in a cloud-specific format that cannot be
-                // opened via local filesystem paths. We must use ConvertCloudPath with the
-                // model's cloud GUIDs to open through Revit's cloud mechanism.
-                if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
+                // opened via local filesystem paths. Use the Autodesk Docs:// InSessionPath
+                // with ConvertUserVisiblePathToModelPath to open through Revit's cloud mechanism.
+                if (!string.IsNullOrEmpty(linkInfo.CloudInSessionPath))
                 {
                     LogHelper.Info("Opening via cloud path (detached)...");
                     exportDoc = RevitDocumentHelper.OpenCloudDocumentDetached(
-                        _uiApp,
-                        linkInfo.CloudProjectGuid.Value,
-                        linkInfo.CloudModelGuid.Value);
+                        _uiApp, linkInfo.CloudInSessionPath);
                     LogHelper.Info("Cloud model opened successfully (detached).");
                 }
                 else
