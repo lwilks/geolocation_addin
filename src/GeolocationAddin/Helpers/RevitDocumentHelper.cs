@@ -27,8 +27,10 @@ namespace GeolocationAddin.Helpers
             var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
-            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
-            return uiDoc.Document;
+            // Use Application.OpenDocumentFile (not UIApplication.OpenAndActivateDocument)
+            // so the document opens in the background without becoming the active UI document.
+            // This allows us to close it later without hitting "active document may not be closed".
+            return uiApp.Application.OpenDocumentFile(modelPath, openOptions);
         }
 
         public static Document OpenCloudDocumentDetached(UIApplication uiApp, string region, Guid projectGuid, Guid modelGuid)
@@ -43,8 +45,8 @@ namespace GeolocationAddin.Helpers
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
             LogHelper.Info($"Opening cloud model: region={region}, project={projectGuid}, model={modelGuid}");
-            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
-            return uiDoc.Document;
+            // Use Application.OpenDocumentFile to open in background (not as active UI document)
+            return uiApp.Application.OpenDocumentFile(modelPath, openOptions);
         }
 
         public static void SaveDocumentAs(Document doc, string targetPath)
@@ -54,6 +56,14 @@ namespace GeolocationAddin.Helpers
                 OverwriteExistingFile = true,
                 MaximumBackups = 1
             };
+
+            // Detached workshared documents require SaveAsCentral = true
+            if (doc.IsWorkshared)
+            {
+                var wsOptions = new WorksharingSaveAsOptions { SaveAsCentral = true };
+                saveAsOptions.SetWorksharingOptions(wsOptions);
+            }
+
             doc.SaveAs(targetPath, saveAsOptions);
         }
 
@@ -71,6 +81,13 @@ namespace GeolocationAddin.Helpers
                         OverwriteExistingFile = true,
                         MaximumBackups = 1
                     };
+
+                    if (doc.IsWorkshared)
+                    {
+                        var wsOptions = new WorksharingSaveAsOptions { SaveAsCentral = true };
+                        saveOptions.SetWorksharingOptions(wsOptions);
+                    }
+
                     doc.SaveAs(doc.PathName, saveOptions);
                 }
 
