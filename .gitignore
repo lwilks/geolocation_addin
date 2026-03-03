@@ -1,0 +1,37 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+packages/
+*.nupkg
+project.lock.json
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+bld/
+
+## NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+## Rider
+.idea/
+*.sln.iml
+
+## Config (user-specific)
+config/config.json
+config/mapping.csv
+
+## OS
+.DS_Store
+Thumbs.db

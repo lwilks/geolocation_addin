@@ -1,0 +1,38 @@
+using System;
+using System.IO;
+
+namespace GeolocationAddin.Helpers
+{
+    public static class LogHelper
+    {
+        private static readonly string LogDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "GeolocationAddin");
+
+        private static readonly string LogFile = Path.Combine(LogDir, "geolocation.log");
+
+        public static void Info(string message)
+        {
+            WriteLog("INFO", message);
+        }
+
+        public static void Error(string message)
+        {
+            WriteLog("ERROR", message);
+        }
+
+        private static void WriteLog(string level, string message)
+        {
+            try
+            {
+                Directory.CreateDirectory(LogDir);
+                var line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{level}] {message}";
+                File.AppendAllText(LogFile, line + Environment.NewLine);
+            }
+            catch
+            {
+                // Logging should never crash the addin
+            }
+        }
+    }
+}

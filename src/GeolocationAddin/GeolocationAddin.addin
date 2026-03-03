@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Geolocation Addin</Name>
+    <Assembly>GeolocationAddin.dll</Assembly>
+    <AddInId>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</AddInId>
+    <FullClassName>GeolocationAddin.Application.GeolocationApp</FullClassName>
+    <VendorId>CUSTOM</VendorId>
+    <VendorDescription>Custom Geolocation Tools</VendorDescription>
+  </AddIn>
+</RevitAddIns>
