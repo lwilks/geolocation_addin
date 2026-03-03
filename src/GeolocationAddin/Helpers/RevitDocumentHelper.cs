@@ -1,19 +1,21 @@
 using System;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 
 namespace GeolocationAddin.Helpers
 {
     public static class RevitDocumentHelper
     {
-        public static Document OpenDocument(Autodesk.Revit.ApplicationServices.Application app, string filePath)
+        public static Document OpenDocument(UIApplication uiApp, string filePath)
         {
             var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(filePath);
             var openOptions = new OpenOptions();
 
-            return app.OpenDocumentFile(modelPath, openOptions);
+            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
+            return uiDoc.Document;
         }
 
-        public static Document OpenDocumentDetached(Autodesk.Revit.ApplicationServices.Application app, string filePath)
+        public static Document OpenDocumentDetached(UIApplication uiApp, string filePath)
         {
             var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(filePath);
             var openOptions = new OpenOptions();
@@ -25,7 +27,8 @@ namespace GeolocationAddin.Helpers
             var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
-            return app.OpenDocumentFile(modelPath, openOptions);
+            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
+            return uiDoc.Document;
         }
 
         public static void CloseDocument(Document doc, bool save)
@@ -37,12 +40,11 @@ namespace GeolocationAddin.Helpers
             {
                 if (save && doc.IsModifiable)
                 {
-                    // Use SaveAs for detached documents
                     var saveOptions = new SaveAsOptions { OverwriteExistingFile = true };
                     doc.SaveAs(doc.PathName, saveOptions);
                 }
 
-                doc.Close(false); // false = don't prompt to save
+                doc.Close(false);
             }
             catch (Exception ex)
             {

@@ -30,7 +30,7 @@ namespace GeolocationAddin.Core
 
             // 1. Open site model
             LogHelper.Info($"Opening site model: {_config.SiteModelPath}");
-            var siteDoc = RevitDocumentHelper.OpenDocument(_uiApp.Application, _config.SiteModelPath);
+            var siteDoc = RevitDocumentHelper.OpenDocument(_uiApp, _config.SiteModelPath);
 
             try
             {
@@ -159,7 +159,7 @@ namespace GeolocationAddin.Core
                 try
                 {
                     copiedDoc = RevitDocumentHelper.OpenDocumentDetached(
-                        _uiApp.Application, linkInfo.TargetFilePath);
+                        _uiApp, linkInfo.TargetFilePath);
                     coordsPublished = CoordinatePublisher.PublishViaTransform(copiedDoc, linkInfo.TotalTransform);
                     RevitDocumentHelper.CloseDocument(copiedDoc, save: true);
                     copiedDoc = null;
