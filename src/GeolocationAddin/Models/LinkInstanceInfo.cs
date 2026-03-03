@@ -1,3 +1,4 @@
+using System;
 using Autodesk.Revit.DB;
 
 namespace GeolocationAddin.Models
@@ -16,5 +17,10 @@ namespace GeolocationAddin.Models
 
         // Cloud model path (e.g. "Autodesk Docs://...") for ACC/BIM360 links
         public string CloudInSessionPath { get; set; }
+
+        // Cloud GUIDs for opening via ConvertCloudGUIDsToCloudPath
+        public Guid? CloudProjectGuid { get; set; }
+        public Guid? CloudModelGuid { get; set; }
+        public string CloudRegion { get; set; }
     }
 }

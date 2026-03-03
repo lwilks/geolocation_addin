@@ -120,7 +120,7 @@ namespace GeolocationAddin.Core
                         TotalTransform = instance.GetTotalTransform()
                     };
 
-                    // Extract cloud InSessionPath from external resource references
+                    // Extract cloud GUIDs from external resource references
                     try
                     {
                         var extResources = linkType.GetExternalResourceReferences();
@@ -128,24 +128,61 @@ namespace GeolocationAddin.Core
                         {
                             foreach (var kvp in extResources)
                             {
-                                var inSessionPath = kvp.Value.InSessionPath;
+                                var resourceRef = kvp.Value;
+
+                                var inSessionPath = resourceRef.InSessionPath;
                                 if (!string.IsNullOrEmpty(inSessionPath))
                                 {
                                     info.CloudInSessionPath = inSessionPath;
                                     LogHelper.Info($"Cloud path for '{instanceName}': {inSessionPath}");
                                 }
+
+                                // Extract cloud GUIDs for ConvertCloudGUIDsToCloudPath
+                                var refMap = resourceRef.GetReferenceInformation();
+                                if (refMap != null)
+                                {
+                                    foreach (var refEntry in refMap)
+                                        LogHelper.Info($"  RefInfo['{instanceName}']: {refEntry.Key} = '{refEntry.Value}'");
+
+                                    string projectIdStr, modelIdStr;
+                                    if (refMap.TryGetValue("LinkedModelProjectId", out projectIdStr) &&
+                                        refMap.TryGetValue("LinkedModelModelId", out modelIdStr))
+                                    {
+                                        Guid projectGuid, modelGuid;
+                                        if (Guid.TryParse(projectIdStr, out projectGuid) &&
+                                            Guid.TryParse(modelIdStr, out modelGuid))
+                                        {
+                                            info.CloudProjectGuid = projectGuid;
+                                            info.CloudModelGuid = modelGuid;
+
+                                            string region;
+                                            if (refMap.TryGetValue("LinkedModelRegion", out region) &&
+                                                !string.IsNullOrEmpty(region))
+                                                info.CloudRegion = region;
+                                            else
+                                                info.CloudRegion = "US";
+
+                                            LogHelper.Info($"Cloud GUIDs for '{instanceName}': project={projectGuid}, model={modelGuid}, region={info.CloudRegion}");
+                                        }
+                                        else
+                                        {
+                                            LogHelper.Error($"Could not parse cloud GUIDs for '{instanceName}': project='{projectIdStr}', model='{modelIdStr}'");
+                                        }
+                                    }
+                                }
+
                                 break;
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.Info($"Could not extract cloud path for '{instanceName}': {ex.Message}");
+                        LogHelper.Info($"Could not extract cloud info for '{instanceName}': {ex.Message}");
                     }
 
-                    if (string.IsNullOrEmpty(info.CloudInSessionPath) && sourcePath == null)
+                    if (!info.CloudProjectGuid.HasValue && sourcePath == null)
                     {
-                        LogHelper.Error($"No cloud path and no source file path for: {instanceName}");
+                        LogHelper.Error($"No cloud GUIDs and no source file path for: {instanceName}");
                         continue;
                     }
 
@@ -179,14 +216,15 @@ namespace GeolocationAddin.Core
             try
             {
                 // Step 1: Open the model (detached from central).
-                // ACC Desktop Connector files are in a cloud-specific format that cannot be
-                // opened via local filesystem paths. Use the Autodesk Docs:// InSessionPath
-                // with ConvertUserVisiblePathToModelPath to open through Revit's cloud mechanism.
-                if (!string.IsNullOrEmpty(linkInfo.CloudInSessionPath))
+                // ACC cloud models must be opened via cloud GUIDs, not filesystem paths.
+                // ConvertCloudGUIDsToCloudPath creates a proper cloud ModelPath from
+                // the project GUID, model GUID, and region extracted from external resource refs.
+                if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
                 {
-                    LogHelper.Info("Opening via cloud path (detached)...");
+                    LogHelper.Info("Opening via cloud GUIDs (detached)...");
                     exportDoc = RevitDocumentHelper.OpenCloudDocumentDetached(
-                        _uiApp, linkInfo.CloudInSessionPath);
+                        _uiApp, linkInfo.CloudRegion,
+                        linkInfo.CloudProjectGuid.Value, linkInfo.CloudModelGuid.Value);
                     LogHelper.Info("Cloud model opened successfully (detached).");
                 }
                 else
