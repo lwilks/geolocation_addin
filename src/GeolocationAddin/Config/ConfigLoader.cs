@@ -32,9 +32,6 @@ namespace GeolocationAddin.Config
 
         private static void Validate(AddinConfig config)
         {
-            if (string.IsNullOrWhiteSpace(config.CsvMappingPath))
-                throw new ConfigurationException("csvMappingPath is required in config.");
-
             if (string.IsNullOrWhiteSpace(config.OutputFolder))
                 throw new ConfigurationException("outputFolder is required in config.");
 
