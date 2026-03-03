@@ -32,12 +32,6 @@ namespace GeolocationAddin.Config
 
         private static void Validate(AddinConfig config)
         {
-            if (string.IsNullOrWhiteSpace(config.SiteModelPath))
-                throw new ConfigurationException("siteModelPath is required in config.");
-
-            if (!File.Exists(config.SiteModelPath))
-                throw new ConfigurationException($"Site model not found: {config.SiteModelPath}");
-
             if (string.IsNullOrWhiteSpace(config.CsvMappingPath))
                 throw new ConfigurationException("csvMappingPath is required in config.");
 

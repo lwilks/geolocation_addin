@@ -28,48 +28,47 @@ namespace GeolocationAddin.Core
         {
             var results = new List<ProcessingResult>();
 
-            // 1. Open site model
-            LogHelper.Info($"Opening site model: {_config.SiteModelPath}");
-            var siteDoc = RevitDocumentHelper.OpenDocument(_uiApp, _config.SiteModelPath);
-
-            try
+            // 1. Use the active document as the site model
+            var uiDoc = _uiApp.ActiveUIDocument;
+            if (uiDoc == null)
             {
-                // 2. Collect all RevitLinkInstance elements
-                var linkInstances = new FilteredElementCollector(siteDoc)
-                    .OfClass(typeof(RevitLinkInstance))
-                    .Cast<RevitLinkInstance>()
-                    .ToList();
-
-                LogHelper.Info($"Found {linkInstances.Count} link instances in site model.");
-
-                // 3. Build link info list
-                var linkInfos = BuildLinkInfoList(siteDoc, linkInstances);
-                LogHelper.Info($"Matched {linkInfos.Count} link instances to CSV mapping entries.");
-
-                if (linkInfos.Count == 0)
-                {
-                    TaskDialog.Show("Geolocation",
-                        "No link instances matched the CSV mapping.\n\n" +
-                        "Check that LinkInstanceName values in the CSV match the link instance names in Revit.");
-                    return;
-                }
-
-                // 4. Group by RevitLinkType for coordinate publishing
-                var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
-
-                foreach (var group in typeGroups)
-                {
-                    foreach (var linkInfo in group)
-                    {
-                        var result = ProcessLink(siteDoc, linkInfo);
-                        results.Add(result);
-                    }
-                }
+                TaskDialog.Show("Geolocation", "No document is open.\n\nOpen the site model first, then run this command.");
+                return;
             }
-            finally
+
+            var siteDoc = uiDoc.Document;
+            LogHelper.Info($"Using active document as site model: {siteDoc.PathName}");
+
+            // 2. Collect all RevitLinkInstance elements
+            var linkInstances = new FilteredElementCollector(siteDoc)
+                .OfClass(typeof(RevitLinkInstance))
+                .Cast<RevitLinkInstance>()
+                .ToList();
+
+            LogHelper.Info($"Found {linkInstances.Count} link instances in site model.");
+
+            // 3. Build link info list
+            var linkInfos = BuildLinkInfoList(siteDoc, linkInstances);
+            LogHelper.Info($"Matched {linkInfos.Count} link instances to CSV mapping entries.");
+
+            if (linkInfos.Count == 0)
             {
-                // Close site model without saving (we restored all links)
-                RevitDocumentHelper.CloseDocument(siteDoc, save: false);
+                TaskDialog.Show("Geolocation",
+                    "No link instances matched the CSV mapping.\n\n" +
+                    "Check that LinkInstanceName values in the CSV match the link instance names in Revit.");
+                return;
+            }
+
+            // 4. Group by RevitLinkType for coordinate publishing
+            var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
+
+            foreach (var group in typeGroups)
+            {
+                foreach (var linkInfo in group)
+                {
+                    var result = ProcessLink(siteDoc, linkInfo);
+                    results.Add(result);
+                }
             }
 
             // 5. Show summary
