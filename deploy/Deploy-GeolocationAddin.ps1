@@ -116,5 +116,5 @@ Write-Host "     - Set siteModelPath to your Desktop Connector site model path" 
 Write-Host "     - Set output folder paths" -ForegroundColor Gray
 Write-Host "  2. Edit $mappingFile" -ForegroundColor White
 Write-Host "     - Add rows mapping link instance names to target file names" -ForegroundColor Gray
-Write-Host "  3. Open Revit 2024 — look for the 'Geolocation' tab in the ribbon" -ForegroundColor White
+Write-Host "  3. Open Revit 2024 - look for the 'Geolocation' tab in the ribbon" -ForegroundColor White
 Write-Host ""
