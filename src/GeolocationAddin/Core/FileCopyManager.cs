@@ -108,14 +108,32 @@ namespace GeolocationAddin.Core
 
             var targetPath = Path.Combine(outputFolder, targetFileName);
 
-            LogHelper.Info($"Copying: {Path.GetFileName(sourceFilePath)} -> {targetFileName}");
+            LogHelper.Info($"File.Copy fallback: {Path.GetFileName(sourceFilePath)} -> {targetFileName}");
+
+            // Diagnostic: log source file size to detect Desktop Connector stubs
+            var sourceInfo = new FileInfo(sourceFilePath);
+            LogHelper.Info($"Source file size: {sourceInfo.Length:N0} bytes");
+
             File.Copy(sourceFilePath, targetPath, overwrite: true);
 
-            // Strip cloud worksharing metadata from the copy using TransmissionData.
-            // Raw copies of ACC cloud models retain the cloud central reference,
-            // causing Revit to throw COleException 0x80004005 when opening.
-            // Setting IsTransmitted = true tells Revit to treat the file as a
-            // standalone transmitted copy (like eTransmit), bypassing cloud sync.
+            var targetInfo = new FileInfo(targetPath);
+            LogHelper.Info($"Copy file size: {targetInfo.Length:N0} bytes");
+
+            // Try to read BasicFileInfo for diagnostics
+            try
+            {
+                var basicInfo = BasicFileInfo.Extract(targetPath);
+                LogHelper.Info($"BasicFileInfo — IsWorkshared: {basicInfo.IsWorkshared}, " +
+                               $"IsCentral: {basicInfo.IsCentral}, " +
+                               $"IsLocal: {basicInfo.IsLocal}, " +
+                               $"CentralPath: '{basicInfo.CentralPath}'");
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Error($"BasicFileInfo.Extract failed: {ex.Message}");
+            }
+
+            // Try TransmissionData cleanup
             try
             {
                 var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(targetPath);
@@ -124,11 +142,11 @@ namespace GeolocationAddin.Core
                 {
                     transData.IsTransmitted = true;
                     TransmissionData.WriteTransmissionData(targetModelPath, transData);
-                    LogHelper.Info("Marked copy as transmitted (stripped cloud central reference).");
+                    LogHelper.Info("Marked copy as transmitted.");
                 }
                 else
                 {
-                    LogHelper.Info("TransmissionData is null — file may not be workshared.");
+                    LogHelper.Info("TransmissionData is null.");
                 }
             }
             catch (Exception ex)

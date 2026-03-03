@@ -144,25 +144,57 @@ namespace GeolocationAddin.Core
 
             LogHelper.Info($"\n--- Processing: {linkInfo.InstanceName} -> {linkInfo.TargetFileName} ---");
 
-            // Step 1: Copy source file and strip cloud metadata via TransmissionData
+            var targetFileName = linkInfo.TargetFileName;
+            if (!targetFileName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase))
+                targetFileName += ".rvt";
+            linkInfo.TargetFilePath = Path.Combine(_config.OutputFolder, targetFileName);
+
+            // Step 1: Create a clean local copy.
+            // Primary: SaveAs from the already-loaded linked document (bypasses Desktop Connector)
+            // Fallback: File.Copy + TransmissionData (with diagnostics)
             try
             {
-                linkInfo.TargetFilePath = FileCopyManager.CopyLinkedModel(
-                    linkInfo.SourceFilePath, linkInfo.TargetFileName, _config.OutputFolder);
-                result.CopySucceeded = true;
+                var linkDoc = linkInfo.Instance.GetLinkDocument();
+                if (linkDoc != null)
+                {
+                    LogHelper.Info($"GetLinkDocument succeeded (PathName: {linkDoc.PathName})");
+                    LogHelper.Info($"SaveAs to: {linkInfo.TargetFilePath}");
+                    RevitDocumentHelper.SaveDocumentAs(linkDoc, linkInfo.TargetFilePath);
+                    result.CopySucceeded = true;
+                    LogHelper.Info("SaveAs from link document succeeded.");
+                }
+                else
+                {
+                    LogHelper.Info("GetLinkDocument() returned null — link not loaded.");
+                }
             }
             catch (Exception ex)
             {
-                result.ErrorMessage = $"Copy failed: {ex.Message}";
-                LogHelper.Error(result.ErrorMessage);
-                return result;
+                LogHelper.Error($"SaveAs from link document failed: {ex.Message}");
             }
 
-            // Step 2: Open the cleaned copy, apply coordinates, export
+            if (!result.CopySucceeded)
+            {
+                // Fallback: File.Copy with diagnostics
+                try
+                {
+                    linkInfo.TargetFilePath = FileCopyManager.CopyLinkedModel(
+                        linkInfo.SourceFilePath, targetFileName, _config.OutputFolder);
+                    result.CopySucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    result.ErrorMessage = $"All copy methods failed. Last error: {ex.Message}";
+                    LogHelper.Error(result.ErrorMessage);
+                    return result;
+                }
+            }
+
+            // Step 2: Open the copy, apply coordinates, export
             Document exportDoc = null;
             try
             {
-                LogHelper.Info($"Opening cleaned copy: {linkInfo.TargetFilePath}");
+                LogHelper.Info($"Opening copy: {linkInfo.TargetFilePath}");
                 exportDoc = RevitDocumentHelper.OpenDocumentDetached(
                     _uiApp, linkInfo.TargetFilePath);
                 LogHelper.Info("Copy opened successfully.");
@@ -175,7 +207,7 @@ namespace GeolocationAddin.Core
                     LogHelper.Error("Failed to apply coordinates (Strategy B).");
 
                 // Export
-                var baseName = Path.GetFileNameWithoutExtension(linkInfo.TargetFileName);
+                var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
                     result.IfcExported = ModelExporter.ExportIfc(exportDoc, _config.IfcOutputFolder, baseName);
