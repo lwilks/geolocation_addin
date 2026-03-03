@@ -106,13 +106,8 @@ namespace GeolocationAddin.Core
                     }
 
                     var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType, _config.LinkSourceFolder);
-                    if (sourcePath == null)
-                    {
-                        LogHelper.Error($"Could not resolve source file path for: {instanceName}");
-                        continue;
-                    }
 
-                    linkInfos.Add(new LinkInstanceInfo
+                    var info = new LinkInstanceInfo
                     {
                         Instance = instance,
                         LinkType = linkType,
@@ -123,7 +118,45 @@ namespace GeolocationAddin.Core
                         TargetFileName = targetName,
                         TargetFilePath = Path.Combine(_config.OutputFolder, targetName),
                         TotalTransform = instance.GetTotalTransform()
-                    });
+                    };
+
+                    // Extract cloud GUIDs from external resource references
+                    try
+                    {
+                        var extResources = linkType.GetExternalResourceReferences();
+                        if (extResources != null)
+                        {
+                            foreach (var kvp in extResources)
+                            {
+                                var refMap = kvp.Value.GetReferenceInformation();
+                                if (refMap != null)
+                                {
+                                    string projId, modId;
+                                    if (refMap.TryGetValue("LinkedModelProjectId", out projId))
+                                        info.CloudProjectGuid = Guid.Parse(projId);
+                                    if (refMap.TryGetValue("LinkedModelModelId", out modId))
+                                        info.CloudModelGuid = Guid.Parse(modId);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Info($"Could not extract cloud GUIDs for '{instanceName}': {ex.Message}");
+                    }
+
+                    if (info.CloudProjectGuid.HasValue && info.CloudModelGuid.HasValue)
+                    {
+                        LogHelper.Info($"Cloud GUIDs for '{instanceName}': project={info.CloudProjectGuid}, model={info.CloudModelGuid}");
+                    }
+                    else if (sourcePath == null)
+                    {
+                        LogHelper.Error($"No cloud GUIDs and no source path for: {instanceName}");
+                        continue;
+                    }
+
+                    linkInfos.Add(info);
                 }
                 catch (Exception ex)
                 {
@@ -149,64 +182,45 @@ namespace GeolocationAddin.Core
                 targetFileName += ".rvt";
             linkInfo.TargetFilePath = Path.Combine(_config.OutputFolder, targetFileName);
 
-            // Step 1: Create a clean local copy.
-            // Primary: SaveAs from the already-loaded linked document (bypasses Desktop Connector)
-            // Fallback: File.Copy + TransmissionData (with diagnostics)
-            try
-            {
-                var linkDoc = linkInfo.Instance.GetLinkDocument();
-                if (linkDoc != null)
-                {
-                    LogHelper.Info($"GetLinkDocument succeeded (PathName: {linkDoc.PathName})");
-                    LogHelper.Info($"SaveAs to: {linkInfo.TargetFilePath}");
-                    RevitDocumentHelper.SaveDocumentAs(linkDoc, linkInfo.TargetFilePath);
-                    result.CopySucceeded = true;
-                    LogHelper.Info("SaveAs from link document succeeded.");
-                }
-                else
-                {
-                    LogHelper.Info("GetLinkDocument() returned null — link not loaded.");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Error($"SaveAs from link document failed: {ex.Message}");
-            }
-
-            if (!result.CopySucceeded)
-            {
-                // Fallback: File.Copy with diagnostics
-                try
-                {
-                    linkInfo.TargetFilePath = FileCopyManager.CopyLinkedModel(
-                        linkInfo.SourceFilePath, targetFileName, _config.OutputFolder);
-                    result.CopySucceeded = true;
-                }
-                catch (Exception ex)
-                {
-                    result.ErrorMessage = $"All copy methods failed. Last error: {ex.Message}";
-                    LogHelper.Error(result.ErrorMessage);
-                    return result;
-                }
-            }
-
-            // Step 2: Open the copy, apply coordinates, export
             Document exportDoc = null;
             try
             {
-                LogHelper.Info($"Opening copy: {linkInfo.TargetFilePath}");
-                exportDoc = RevitDocumentHelper.OpenDocumentDetached(
-                    _uiApp, linkInfo.TargetFilePath);
-                LogHelper.Info("Copy opened successfully.");
+                // Step 1: Open the cloud model via its cloud path (detached from central).
+                // ACC Desktop Connector files are in a cloud-specific format that cannot be
+                // opened via local filesystem paths. We must use ConvertCloudPath with the
+                // model's cloud GUIDs to open through Revit's cloud mechanism.
+                if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
+                {
+                    LogHelper.Info("Opening via cloud path (detached)...");
+                    exportDoc = RevitDocumentHelper.OpenCloudDocumentDetached(
+                        _uiApp,
+                        linkInfo.CloudProjectGuid.Value,
+                        linkInfo.CloudModelGuid.Value);
+                    LogHelper.Info("Cloud model opened successfully (detached).");
+                }
+                else
+                {
+                    // Non-cloud link: open from local file path
+                    LogHelper.Info($"Opening local source (detached): {linkInfo.SourceFilePath}");
+                    exportDoc = RevitDocumentHelper.OpenDocumentDetached(
+                        _uiApp, linkInfo.SourceFilePath);
+                    LogHelper.Info("Local source opened successfully.");
+                }
 
-                // Apply coordinates via Strategy B (transform-based)
+                // Step 2: SaveAs to target path — creates a clean standalone .rvt file
+                LogHelper.Info($"SaveAs to: {linkInfo.TargetFilePath}");
+                RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
+                result.CopySucceeded = true;
+                LogHelper.Info("SaveAs completed — clean local copy created.");
+
+                // Step 3: Apply coordinates via Strategy B (transform-based)
                 result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
                     exportDoc, linkInfo.TotalTransform);
 
                 if (!result.CoordinatesPublished)
                     LogHelper.Error("Failed to apply coordinates (Strategy B).");
 
-                // Export
+                // Step 4: Export
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
@@ -218,7 +232,7 @@ namespace GeolocationAddin.Core
                 if (_config.ExportSettings.ExportDwg)
                     result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
 
-                // Save and close
+                // Step 5: Save and close
                 RevitDocumentHelper.CloseDocument(exportDoc, save: true);
                 exportDoc = null;
             }

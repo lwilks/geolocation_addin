@@ -1,3 +1,4 @@
+using System;
 using Autodesk.Revit.DB;
 
 namespace GeolocationAddin.Models
@@ -13,5 +14,9 @@ namespace GeolocationAddin.Models
         public string TargetFileName { get; set; }
         public string TargetFilePath { get; set; }
         public Transform TotalTransform { get; set; }
+
+        // Cloud model identifiers for ACC/BIM360 links
+        public Guid? CloudProjectGuid { get; set; }
+        public Guid? CloudModelGuid { get; set; }
     }
 }

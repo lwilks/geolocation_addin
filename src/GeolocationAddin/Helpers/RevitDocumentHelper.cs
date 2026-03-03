@@ -31,6 +31,21 @@ namespace GeolocationAddin.Helpers
             return uiDoc.Document;
         }
 
+        public static Document OpenCloudDocumentDetached(UIApplication uiApp, Guid projectGuid, Guid modelGuid)
+        {
+            var cloudPath = ModelPathUtils.ConvertCloudPath(projectGuid, modelGuid);
+            var openOptions = new OpenOptions();
+
+            openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
+
+            var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
+            openOptions.SetOpenWorksetsConfiguration(worksetConfig);
+
+            LogHelper.Info($"Opening cloud model — project: {projectGuid}, model: {modelGuid}");
+            var uiDoc = uiApp.OpenAndActivateDocument(cloudPath, openOptions, false);
+            return uiDoc.Document;
+        }
+
         public static void SaveDocumentAs(Document doc, string targetPath)
         {
             var saveAsOptions = new SaveAsOptions
