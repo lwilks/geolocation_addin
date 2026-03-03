@@ -9,37 +9,32 @@ namespace GeolocationAddin.Core
     {
         /// <summary>
         /// Strategy A: Relink the type to the copied file, publish coordinates, then restore.
-        /// LoadFrom must be called outside any transaction.
+        /// LoadFrom must be called outside any transaction. PublishCoordinates needs a transaction.
         /// </summary>
         public static bool PublishViaRelink(Document siteDoc, LinkInstanceInfo linkInfo)
         {
             var linkType = linkInfo.LinkType;
-            ModelPath originalPath = null;
+            bool loadFromSucceeded = false;
 
             try
             {
-                // 1. Save original link path
-                try
-                {
-                    var extRef = linkType.GetExternalFileReference();
-                    if (extRef != null)
-                        originalPath = extRef.GetAbsolutePath();
-                }
-                catch (Exception)
-                {
-                    // Cloud/ACC link — save the InSessionPath from external resources instead
-                    LogHelper.Info("Cloud link detected, saving external resource reference for restore.");
-                }
-
-                // 2. Relink to the copied file
+                // 1. Relink to the copied file (must be outside any transaction)
                 var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(linkInfo.TargetFilePath);
                 linkType.LoadFrom(targetModelPath, new WorksetConfiguration());
+                loadFromSucceeded = true;
 
                 LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");
 
-                // 3. Publish shared coordinates from site model to the link
-                var linkElementId = new LinkElementId(linkInfo.InstanceId);
-                siteDoc.PublishCoordinates(linkElementId);
+                // 2. Publish shared coordinates (requires a transaction)
+                using (var tx = new Transaction(siteDoc, "Publish Coordinates"))
+                {
+                    tx.Start();
+
+                    var linkElementId = new LinkElementId(linkInfo.InstanceId);
+                    siteDoc.PublishCoordinates(linkElementId);
+
+                    tx.Commit();
+                }
 
                 LogHelper.Info($"Published coordinates to: {linkInfo.TargetFileName}");
 
@@ -52,17 +47,17 @@ namespace GeolocationAddin.Core
             }
             finally
             {
-                // 4. Restore original link path
-                if (originalPath != null)
+                // 3. Restore original link — use Reload() for cloud links
+                if (loadFromSucceeded)
                 {
                     try
                     {
-                        linkType.LoadFrom(originalPath, new WorksetConfiguration());
-                        LogHelper.Info("Restored original link path.");
+                        linkType.Reload();
+                        LogHelper.Info("Restored original link via Reload().");
                     }
                     catch (Exception ex)
                     {
-                        LogHelper.Error($"Failed to restore link path: {ex.Message}");
+                        LogHelper.Error($"Failed to restore link: {ex.Message}");
                     }
                 }
             }

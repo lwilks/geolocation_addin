@@ -158,46 +158,39 @@ namespace GeolocationAddin.Core
                 return result;
             }
 
-            // Step 2: Publish shared coordinates (Strategy A, fallback B)
+            // Step 2: Publish shared coordinates (Strategy A with transaction, fallback B)
             bool coordsPublished = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
 
             if (!coordsPublished)
             {
                 LogHelper.Info("Strategy A failed, attempting Strategy B (transform-based)...");
-
-                // For Strategy B we need to open the copied model
-                Document copiedDoc = null;
-                try
-                {
-                    copiedDoc = RevitDocumentHelper.OpenDocumentDetached(
-                        _uiApp, linkInfo.TargetFilePath);
-                    coordsPublished = CoordinatePublisher.PublishViaTransform(copiedDoc, linkInfo.TotalTransform);
-                    RevitDocumentHelper.CloseDocument(copiedDoc, save: true);
-                    copiedDoc = null;
-                }
-                catch (Exception ex)
-                {
-                    LogHelper.Error($"Strategy B open/apply failed: {ex.Message}");
-                    if (copiedDoc != null)
-                        RevitDocumentHelper.CloseDocument(copiedDoc, save: false);
-                }
+                LogHelper.Info("Strategy B will be applied during export step (when the copied model is opened).");
             }
 
             result.CoordinatesPublished = coordsPublished;
 
             if (!coordsPublished)
             {
-                result.ErrorMessage = "Both coordinate publishing strategies failed.";
-                LogHelper.Error(result.ErrorMessage);
-                return result;
+                // Don't return — continue to export step where we'll apply Strategy B
+                LogHelper.Info("Will attempt Strategy B when opening the copied model for export.");
             }
 
-            // Step 3: Export
+            // Step 3: Open copied model, apply Strategy B if needed, then export
             Document exportDoc = null;
             try
             {
                 exportDoc = RevitDocumentHelper.OpenDocumentDetached(
                     _uiApp, linkInfo.TargetFilePath);
+
+                // Apply Strategy B (transform-based coordinates) if Strategy A failed
+                if (!coordsPublished)
+                {
+                    coordsPublished = CoordinatePublisher.PublishViaTransform(exportDoc, linkInfo.TotalTransform);
+                    result.CoordinatesPublished = coordsPublished;
+
+                    if (!coordsPublished)
+                        LogHelper.Error("Strategy B also failed.");
+                }
 
                 var baseName = Path.GetFileNameWithoutExtension(linkInfo.TargetFileName);
 
@@ -210,12 +203,13 @@ namespace GeolocationAddin.Core
                 if (_config.ExportSettings.ExportDwg)
                     result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
 
-                RevitDocumentHelper.CloseDocument(exportDoc, save: false);
+                // Save if we applied coordinates via Strategy B
+                RevitDocumentHelper.CloseDocument(exportDoc, save: !coordsPublished ? false : true);
                 exportDoc = null;
             }
             catch (Exception ex)
             {
-                result.ErrorMessage = $"Export failed: {ex.Message}";
+                result.ErrorMessage = $"Export/open failed: {ex.Message}";
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
                     RevitDocumentHelper.CloseDocument(exportDoc, save: false);
