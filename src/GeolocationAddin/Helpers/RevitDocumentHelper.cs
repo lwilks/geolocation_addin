@@ -39,13 +39,12 @@ namespace GeolocationAddin.Helpers
             var modelPath = ModelPathUtils.ConvertCloudGUIDsToCloudPath(region, projectGuid, modelGuid);
             var openOptions = new OpenOptions();
 
-            openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
-
+            // Cloud models do not support DetachFromCentralOption with OpenDocumentFile.
+            // Instead, open normally and use SaveAs to create a standalone local copy.
             var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
             openOptions.SetOpenWorksetsConfiguration(worksetConfig);
 
             LogHelper.Info($"Opening cloud model: region={region}, project={projectGuid}, model={modelGuid}");
-            // Use Application.OpenDocumentFile to open in background (not as active UI document)
             return uiApp.Application.OpenDocumentFile(modelPath, openOptions);
         }
 
