@@ -62,6 +62,18 @@ namespace GeolocationAddin.Config
             }
         }
 
+        public static void Save(AddinConfig config)
+        {
+            Validate(config);
+
+            var dir = Path.GetDirectoryName(ConfigPath);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
+            File.WriteAllText(ConfigPath, json);
+        }
+
         private static void EnsureDirectory(string path, string fieldName)
         {
             try

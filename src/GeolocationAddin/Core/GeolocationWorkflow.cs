@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Windows.Interop;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using GeolocationAddin.Config;
 using GeolocationAddin.Helpers;
 using GeolocationAddin.Models;
+using GeolocationAddin.UI;
 
 namespace GeolocationAddin.Core
 {
@@ -54,16 +56,32 @@ namespace GeolocationAddin.Core
                 catch { }
             }
 
-            // 3. Build link info list
-            var linkInfos = BuildLinkInfoList(siteDoc, linkInstances);
-            LogHelper.Info($"Matched {linkInfos.Count} of {linkInstances.Count} link instances to CSV mapping entries.");
+            // 3. Phase A — non-destructive matching
+            var matchList = BuildMatchList(siteDoc, linkInstances);
+
+            // 4. Show link selection dialog
+            var selectionWindow = new LinkSelectionWindow(matchList);
+            var revitHandle = _uiApp.MainWindowHandle;
+            new WindowInteropHelper(selectionWindow).Owner = revitHandle;
+
+            selectionWindow.ShowDialog();
+
+            if (!selectionWindow.Confirmed)
+            {
+                LogHelper.Info("User cancelled link selection.");
+                return;
+            }
+
+            // 5. Phase B — consume and build full info from selected links
+            var linkInfos = BuildLinkInfoListFromSelection(siteDoc, matchList);
+            LogHelper.Info($"Processing {linkInfos.Count} of {linkInstances.Count} selected link instances.");
 
             if (linkInfos.Count == 0)
             {
-                LogHelper.Info("No link instances matched. Continuing to show summary.");
+                LogHelper.Info("No links selected for processing. Continuing to show summary.");
             }
 
-            // 4. Group by RevitLinkType for coordinate publishing
+            // 6. Group by RevitLinkType for coordinate publishing
             var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
 
             // Cloud models are opened with OpenAndActivateDocument (becomes active doc).
@@ -106,9 +124,10 @@ namespace GeolocationAddin.Core
             ShowSummary(results);
         }
 
-        private List<LinkInstanceInfo> BuildLinkInfoList(Document siteDoc, List<RevitLinkInstance> instances)
+        private List<LinkMatchInfo> BuildMatchList(Document siteDoc, List<RevitLinkInstance> instances)
         {
-            var linkInfos = new List<LinkInstanceInfo>();
+            var matchList = new List<LinkMatchInfo>();
+            var fuzzySettings = _config.FuzzyMatchSettings;
 
             foreach (var instance in instances)
             {
@@ -116,14 +135,89 @@ namespace GeolocationAddin.Core
                 try
                 {
                     instanceName = instance.Name;
-                    var targetName = _mapping.ConsumeTargetName(instanceName);
 
-                    if (targetName == null)
+                    // Try exact match (non-destructive peek)
+                    if (_mapping.TryGetTargetName(instanceName, out var targetName))
                     {
-                        LogHelper.Info($"Skipping unmapped link: {instanceName}");
+                        matchList.Add(new LinkMatchInfo
+                        {
+                            InstanceName = instanceName,
+                            MatchedCsvKey = instanceName,
+                            TargetFileName = targetName,
+                            MatchType = MatchType.Exact,
+                            IsSelected = true,
+                            Instance = instance
+                        });
+                        LogHelper.Info($"Exact match: \"{instanceName}\" -> \"{targetName}\"");
                         continue;
                     }
 
+                    // Try fuzzy match
+                    if (fuzzySettings.Enabled)
+                    {
+                        var candidates = _mapping.GetAvailableKeys().ToList();
+                        var fuzzyResult = FuzzyMatcher.FindBestMatch(
+                            instanceName, candidates,
+                            fuzzySettings.TokenOverlapThreshold,
+                            fuzzySettings.LevenshteinThreshold);
+
+                        if (fuzzyResult != null)
+                        {
+                            _mapping.TryGetTargetName(fuzzyResult.MatchedKey, out var fuzzyTarget);
+                            matchList.Add(new LinkMatchInfo
+                            {
+                                InstanceName = instanceName,
+                                MatchedCsvKey = fuzzyResult.MatchedKey,
+                                TargetFileName = fuzzyTarget,
+                                MatchType = MatchType.Fuzzy,
+                                TokenScore = fuzzyResult.TokenOverlapScore,
+                                LevenshteinScore = fuzzyResult.LevenshteinScore,
+                                IsSelected = false,
+                                Instance = instance
+                            });
+                            LogHelper.Info($"Fuzzy match: \"{instanceName}\" -> \"{fuzzyResult.MatchedKey}\" " +
+                                           $"(token: {fuzzyResult.TokenOverlapScore:F2}, lev: {fuzzyResult.LevenshteinScore:F2})");
+                            continue;
+                        }
+                    }
+
+                    // No match
+                    matchList.Add(new LinkMatchInfo
+                    {
+                        InstanceName = instanceName,
+                        MatchType = MatchType.None,
+                        IsSelected = false,
+                        Instance = instance
+                    });
+                    LogHelper.Info($"No match: \"{instanceName}\"");
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Error($"Error matching link '{instanceName ?? "unknown"}': {ex}");
+                }
+            }
+
+            return matchList;
+        }
+
+        private List<LinkInstanceInfo> BuildLinkInfoListFromSelection(Document siteDoc, List<LinkMatchInfo> matchList)
+        {
+            var linkInfos = new List<LinkInstanceInfo>();
+
+            foreach (var match in matchList.Where(m => m.IsSelected && m.MatchType != MatchType.None))
+            {
+                string instanceName = match.InstanceName;
+                try
+                {
+                    // Consume from mapping now that user has confirmed
+                    var targetName = _mapping.ConsumeByKey(match.MatchedCsvKey);
+                    if (targetName == null)
+                    {
+                        LogHelper.Error($"Could not consume mapping for: {match.MatchedCsvKey}");
+                        continue;
+                    }
+
+                    var instance = match.Instance;
                     var typeId = instance.GetTypeId();
                     var linkType = siteDoc.GetElement(typeId) as RevitLinkType;
                     if (linkType == null)
@@ -171,19 +265,16 @@ namespace GeolocationAddin.Core
                                     foreach (var refEntry in refMap)
                                         LogHelper.Info($"  RefInfo['{instanceName}']: {refEntry.Key} = '{refEntry.Value}'");
 
-                                    string projectIdStr, modelIdStr;
-                                    if (refMap.TryGetValue("LinkedModelProjectId", out projectIdStr) &&
-                                        refMap.TryGetValue("LinkedModelModelId", out modelIdStr))
+                                    if (refMap.TryGetValue("LinkedModelProjectId", out var projectIdStr) &&
+                                        refMap.TryGetValue("LinkedModelModelId", out var modelIdStr))
                                     {
-                                        Guid projectGuid, modelGuid;
-                                        if (Guid.TryParse(projectIdStr, out projectGuid) &&
-                                            Guid.TryParse(modelIdStr, out modelGuid))
+                                        if (Guid.TryParse(projectIdStr, out var projectGuid) &&
+                                            Guid.TryParse(modelIdStr, out var modelGuid))
                                         {
                                             info.CloudProjectGuid = projectGuid;
                                             info.CloudModelGuid = modelGuid;
 
-                                            string region;
-                                            if (refMap.TryGetValue("LinkedModelRegion", out region) &&
+                                            if (refMap.TryGetValue("LinkedModelRegion", out var region) &&
                                                 !string.IsNullOrEmpty(region))
                                                 info.CloudRegion = region;
                                             else
