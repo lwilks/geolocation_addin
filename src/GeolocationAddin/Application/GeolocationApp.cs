@@ -26,6 +26,16 @@ namespace GeolocationAddin.Application
 
                 panel.AddItem(buttonData);
 
+                var settingsData = new PushButtonData(
+                    "SettingsCommand",
+                    "Settings",
+                    assemblyPath,
+                    "GeolocationAddin.Commands.SettingsCommand");
+
+                settingsData.ToolTip = "Configure paths, export settings, and fuzzy matching";
+
+                panel.AddItem(settingsData);
+
                 return Result.Succeeded;
             }
             catch (Exception ex)

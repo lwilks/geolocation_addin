@@ -27,6 +27,9 @@ namespace GeolocationAddin.Config
 
         [JsonProperty("exportSettings")]
         public ExportSettings ExportSettings { get; set; } = new ExportSettings();
+
+        [JsonProperty("fuzzyMatchSettings")]
+        public FuzzyMatchSettings FuzzyMatchSettings { get; set; } = new FuzzyMatchSettings();
     }
 
     public class ExportSettings
@@ -39,5 +42,17 @@ namespace GeolocationAddin.Config
 
         [JsonProperty("exportDwg")]
         public bool ExportDwg { get; set; } = true;
+    }
+
+    public class FuzzyMatchSettings
+    {
+        [JsonProperty("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonProperty("tokenOverlapThreshold")]
+        public double TokenOverlapThreshold { get; set; } = 0.5;
+
+        [JsonProperty("levenshteinThreshold")]
+        public double LevenshteinThreshold { get; set; } = 0.4;
     }
 }

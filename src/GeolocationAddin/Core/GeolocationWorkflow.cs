@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Windows.Interop;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using GeolocationAddin.Config;
 using GeolocationAddin.Helpers;
 using GeolocationAddin.Models;
+using GeolocationAddin.UI;
 
 namespace GeolocationAddin.Core
 {
@@ -15,13 +17,11 @@ namespace GeolocationAddin.Core
     {
         private readonly UIApplication _uiApp;
         private readonly AddinConfig _config;
-        private readonly CsvMapping _mapping;
 
-        public GeolocationWorkflow(UIApplication uiApp, AddinConfig config, CsvMapping mapping)
+        public GeolocationWorkflow(UIApplication uiApp, AddinConfig config)
         {
             _uiApp = uiApp;
             _config = config;
-            _mapping = mapping;
         }
 
         public void Execute()
@@ -47,28 +47,55 @@ namespace GeolocationAddin.Core
 
             LogHelper.Info($"Found {linkInstances.Count} link instances in site model.");
 
-            // Log all link instance names for debugging
             foreach (var li in linkInstances)
             {
                 try { LogHelper.Info($"  Link instance: \"{li.Name}\""); }
                 catch { }
             }
 
-            // 3. Build link info list
-            var linkInfos = BuildLinkInfoList(siteDoc, linkInstances);
-            LogHelper.Info($"Matched {linkInfos.Count} of {linkInstances.Count} link instances to CSV mapping entries.");
+            // 3. Build initial link list (empty target names)
+            var matchList = BuildInitialLinkList(linkInstances);
+
+            // 4. Auto-import from configured CSV path if available
+            if (!string.IsNullOrWhiteSpace(_config.CsvMappingPath) && File.Exists(_config.CsvMappingPath))
+            {
+                try
+                {
+                    var imported = MappingSerializer.Import(_config.CsvMappingPath);
+                    ApplyImportedMappings(matchList, imported);
+                    LogHelper.Info($"Auto-imported {imported.Count} mapping(s) from: {_config.CsvMappingPath}");
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Error($"Failed to auto-import CSV: {ex.Message}");
+                }
+            }
+
+            // 5. Show link mapping dialog
+            var mappingWindow = new LinkMappingWindow(matchList, _config);
+            var revitHandle = _uiApp.MainWindowHandle;
+            new WindowInteropHelper(mappingWindow).Owner = revitHandle;
+
+            mappingWindow.ShowDialog();
+
+            if (!mappingWindow.Confirmed)
+            {
+                LogHelper.Info("User cancelled link mapping.");
+                return;
+            }
+
+            // 6. Build full info from selected links
+            var linkInfos = BuildLinkInfoListFromSelection(siteDoc, matchList);
+            LogHelper.Info($"Processing {linkInfos.Count} of {linkInstances.Count} selected link instances.");
 
             if (linkInfos.Count == 0)
             {
-                LogHelper.Info("No link instances matched. Continuing to show summary.");
+                LogHelper.Info("No links selected for processing. Continuing to show summary.");
             }
 
-            // 4. Group by RevitLinkType for coordinate publishing
+            // 7. Group by RevitLinkType for coordinate publishing
             var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
 
-            // Cloud models are opened with OpenAndActivateDocument (becomes active doc).
-            // We can't close the active doc from the API, so we defer closing until
-            // the next ProcessLink opens a new doc (switching the active doc away).
             Document pendingCloseDoc = null;
 
             foreach (var group in typeGroups)
@@ -81,8 +108,6 @@ namespace GeolocationAddin.Core
                     var result = ProcessLink(siteDoc, linkInfo, out Document exportDoc);
                     results.Add(result);
 
-                    // ProcessLink opened a new doc (now active), so the previous one
-                    // is no longer active and can be closed.
                     if (previousPending != null)
                     {
                         try { previousPending.Close(false); }
@@ -102,28 +127,95 @@ namespace GeolocationAddin.Core
                 catch (Exception ex) { LogHelper.Info($"Final close failed: {ex.Message}"); }
             }
 
-            // 5. Show summary
+            // 8. Show summary
             ShowSummary(results);
         }
 
-        private List<LinkInstanceInfo> BuildLinkInfoList(Document siteDoc, List<RevitLinkInstance> instances)
+        private List<LinkMatchInfo> BuildInitialLinkList(List<RevitLinkInstance> instances)
         {
-            var linkInfos = new List<LinkInstanceInfo>();
+            var list = new List<LinkMatchInfo>();
 
             foreach (var instance in instances)
             {
-                string instanceName = null;
                 try
                 {
-                    instanceName = instance.Name;
-                    var targetName = _mapping.ConsumeTargetName(instanceName);
-
-                    if (targetName == null)
+                    list.Add(new LinkMatchInfo
                     {
-                        LogHelper.Info($"Skipping unmapped link: {instanceName}");
+                        InstanceName = instance.Name,
+                        MatchType = MatchType.None,
+                        IsSelected = false,
+                        Instance = instance
+                    });
+                }
+                catch (Exception ex)
+                {
+                    LogHelper.Error($"Error reading link instance: {ex}");
+                }
+            }
+
+            return list;
+        }
+
+        private void ApplyImportedMappings(List<LinkMatchInfo> links, List<(string linkName, string targetFileName)> imported)
+        {
+            var fuzzySettings = _config.FuzzyMatchSettings;
+
+            foreach (var (linkName, targetFileName) in imported)
+            {
+                // Try exact match on InstanceName
+                var exact = links.FirstOrDefault(l =>
+                    string.Equals(l.InstanceName, linkName, StringComparison.OrdinalIgnoreCase));
+
+                if (exact != null)
+                {
+                    exact.TargetFileName = targetFileName;
+                    exact.MatchedImportKey = linkName;
+                    exact.MatchType = MatchType.Exact;
+                    exact.IsSelected = true;
+                    LogHelper.Info($"Exact match: \"{linkName}\" -> \"{targetFileName}\"");
+                    continue;
+                }
+
+                // Fuzzy fallback
+                if (fuzzySettings.Enabled)
+                {
+                    var candidates = links
+                        .Where(l => !l.HasTargetFileName)
+                        .Select(l => l.InstanceName)
+                        .ToList();
+
+                    var fuzzyResult = FuzzyMatcher.FindBestMatch(
+                        linkName, candidates,
+                        fuzzySettings.TokenOverlapThreshold,
+                        fuzzySettings.LevenshteinThreshold);
+
+                    if (fuzzyResult != null)
+                    {
+                        var match = links.First(l =>
+                            string.Equals(l.InstanceName, fuzzyResult.MatchedKey, StringComparison.OrdinalIgnoreCase));
+
+                        match.TargetFileName = targetFileName;
+                        match.MatchedImportKey = linkName;
+                        match.MatchType = MatchType.Fuzzy;
+                        LogHelper.Info($"Fuzzy match: \"{linkName}\" -> \"{fuzzyResult.MatchedKey}\" -> \"{targetFileName}\"");
                         continue;
                     }
+                }
 
+                LogHelper.Info($"No match for imported entry: \"{linkName}\"");
+            }
+        }
+
+        private List<LinkInstanceInfo> BuildLinkInfoListFromSelection(Document siteDoc, List<LinkMatchInfo> matchList)
+        {
+            var linkInfos = new List<LinkInstanceInfo>();
+
+            foreach (var match in matchList.Where(m => m.IsSelected && m.HasTargetFileName))
+            {
+                string instanceName = match.InstanceName;
+                try
+                {
+                    var instance = match.Instance;
                     var typeId = instance.GetTypeId();
                     var linkType = siteDoc.GetElement(typeId) as RevitLinkType;
                     if (linkType == null)
@@ -142,8 +234,8 @@ namespace GeolocationAddin.Core
                         TypeId = typeId,
                         InstanceName = instanceName,
                         SourceFilePath = sourcePath,
-                        TargetFileName = targetName,
-                        TargetFilePath = Path.Combine(_config.OutputFolder, targetName),
+                        TargetFileName = match.TargetFileName,
+                        TargetFilePath = Path.Combine(_config.OutputFolder, match.TargetFileName),
                         TotalTransform = instance.GetTotalTransform()
                     };
 
@@ -164,26 +256,22 @@ namespace GeolocationAddin.Core
                                     LogHelper.Info($"Cloud path for '{instanceName}': {inSessionPath}");
                                 }
 
-                                // Extract cloud GUIDs for ConvertCloudGUIDsToCloudPath
                                 var refMap = resourceRef.GetReferenceInformation();
                                 if (refMap != null)
                                 {
                                     foreach (var refEntry in refMap)
                                         LogHelper.Info($"  RefInfo['{instanceName}']: {refEntry.Key} = '{refEntry.Value}'");
 
-                                    string projectIdStr, modelIdStr;
-                                    if (refMap.TryGetValue("LinkedModelProjectId", out projectIdStr) &&
-                                        refMap.TryGetValue("LinkedModelModelId", out modelIdStr))
+                                    if (refMap.TryGetValue("LinkedModelProjectId", out var projectIdStr) &&
+                                        refMap.TryGetValue("LinkedModelModelId", out var modelIdStr))
                                     {
-                                        Guid projectGuid, modelGuid;
-                                        if (Guid.TryParse(projectIdStr, out projectGuid) &&
-                                            Guid.TryParse(modelIdStr, out modelGuid))
+                                        if (Guid.TryParse(projectIdStr, out var projectGuid) &&
+                                            Guid.TryParse(modelIdStr, out var modelGuid))
                                         {
                                             info.CloudProjectGuid = projectGuid;
                                             info.CloudModelGuid = modelGuid;
 
-                                            string region;
-                                            if (refMap.TryGetValue("LinkedModelRegion", out region) &&
+                                            if (refMap.TryGetValue("LinkedModelRegion", out var region) &&
                                                 !string.IsNullOrEmpty(region))
                                                 info.CloudRegion = region;
                                             else
@@ -244,7 +332,6 @@ namespace GeolocationAddin.Core
             bool isCloudDoc = false;
             try
             {
-                // Step 1: Open the model (detached from central).
                 if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
                 {
                     LogHelper.Info("Opening via cloud GUIDs (detached)...");
@@ -256,28 +343,23 @@ namespace GeolocationAddin.Core
                 }
                 else
                 {
-                    // Non-cloud link: open from local file path
                     LogHelper.Info($"Opening local source (detached): {linkInfo.SourceFilePath}");
                     exportDoc = RevitDocumentHelper.OpenDocumentDetached(
                         _uiApp, linkInfo.SourceFilePath);
                     LogHelper.Info("Local source opened successfully.");
                 }
 
-                // Step 2: SaveAs to target path — creates a clean standalone .rvt file
                 LogHelper.Info($"SaveAs to: {linkInfo.TargetFilePath}");
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 result.CopySucceeded = true;
                 LogHelper.Info("SaveAs completed — clean local copy created.");
 
-                // Step 3: Apply coordinates via Strategy B (transform-based)
-                // Pass siteDoc so we can add the site model's survey position offsets
                 result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
                     siteDoc, exportDoc, linkInfo.TotalTransform);
 
                 if (!result.CoordinatesPublished)
                     LogHelper.Error("Failed to apply coordinates (Strategy B).");
 
-                // Step 4: Export
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
@@ -289,12 +371,9 @@ namespace GeolocationAddin.Core
                 if (_config.ExportSettings.ExportDwg)
                     result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
 
-                // Step 5: Save the document
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");
 
-                // Cloud docs opened via OpenAndActivateDocument become the active doc
-                // and can't be closed from the API. Defer close to the caller.
                 if (isCloudDoc)
                 {
                     openedDoc = exportDoc;
@@ -311,7 +390,6 @@ namespace GeolocationAddin.Core
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
                 {
-                    // For cloud docs that became active, defer close
                     if (isCloudDoc)
                         openedDoc = exportDoc;
                     else

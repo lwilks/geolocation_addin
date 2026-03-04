@@ -18,12 +18,10 @@ namespace GeolocationAddin.Commands
             try
             {
                 var config = ConfigLoader.Load();
-                var mapping = CsvMapping.Load(config.CsvMappingPath);
 
                 LogHelper.Info($"Config loaded. Site model: {config.SiteModelPath}");
-                LogHelper.Info($"CSV mapping loaded: {mapping.EntryCount} entries");
 
-                var workflow = new GeolocationWorkflow(uiApp, config, mapping);
+                var workflow = new GeolocationWorkflow(uiApp, config);
                 workflow.Execute();
 
                 return Result.Succeeded;

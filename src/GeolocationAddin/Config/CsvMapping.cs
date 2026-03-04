@@ -27,6 +27,16 @@ namespace GeolocationAddin.Config
             return false;
         }
 
+        public IEnumerable<string> GetAvailableKeys()
+        {
+            return _mapping.Where(kvp => kvp.Value.Count > 0).Select(kvp => kvp.Key);
+        }
+
+        public string ConsumeByKey(string key)
+        {
+            return ConsumeTargetName(key);
+        }
+
         public string ConsumeTargetName(string linkInstanceName)
         {
             if (!_mapping.TryGetValue(linkInstanceName, out var targets) || targets.Count == 0)

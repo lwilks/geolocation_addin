@@ -32,9 +32,6 @@ namespace GeolocationAddin.Config
 
         private static void Validate(AddinConfig config)
         {
-            if (string.IsNullOrWhiteSpace(config.CsvMappingPath))
-                throw new ConfigurationException("csvMappingPath is required in config.");
-
             if (string.IsNullOrWhiteSpace(config.OutputFolder))
                 throw new ConfigurationException("outputFolder is required in config.");
 
@@ -60,6 +57,18 @@ namespace GeolocationAddin.Config
                     throw new ConfigurationException("dwgOutputFolder is required when DWG export is enabled.");
                 EnsureDirectory(config.DwgOutputFolder, "dwgOutputFolder");
             }
+        }
+
+        public static void Save(AddinConfig config)
+        {
+            Validate(config);
+
+            var dir = Path.GetDirectoryName(ConfigPath);
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
+            File.WriteAllText(ConfigPath, json);
         }
 
         private static void EnsureDirectory(string path, string fieldName)
