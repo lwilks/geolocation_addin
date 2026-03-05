@@ -139,7 +139,22 @@ namespace GeolocationAddin.Core
                 {
                     tx.Start();
 
-                    var options = new DWGExportOptions { SharedCoords = true };
+                    // Hide linked models to prevent Revit from exporting them as separate xref DWGs
+                    var linkIds = new FilteredElementCollector(doc, view3d.Id)
+                        .OfCategory(BuiltInCategory.OST_RvtLinks)
+                        .OfClass(typeof(RevitLinkInstance))
+                        .WhereElementIsNotElementType()
+                        .ToElementIds()
+                        .Where(id => view3d.CanBeHidden(doc.GetElement(id)))
+                        .ToList();
+
+                    if (linkIds.Count > 0)
+                    {
+                        view3d.HideElements(linkIds);
+                        LogHelper.Info($"DWG export: hid {linkIds.Count} Revit link instance(s) to prevent xref output.");
+                    }
+
+                    var options = new DWGExportOptions { SharedCoords = true, MergedViews = true };
                     var viewIds = new System.Collections.Generic.List<ElementId> { view3d.Id };
 
                     doc.Export(outputFolder, fileNameWithoutExtension, viewIds, options);
