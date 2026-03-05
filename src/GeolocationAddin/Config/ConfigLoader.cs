@@ -73,6 +73,10 @@ namespace GeolocationAddin.Config
 
         private static void EnsureDirectory(string path, string fieldName)
         {
+            // Paths with <LABEL> are resolved per-link at runtime; skip eager creation
+            if (path.Contains("<LABEL>"))
+                return;
+
             try
             {
                 Directory.CreateDirectory(path);
