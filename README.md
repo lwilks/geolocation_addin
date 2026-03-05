@@ -180,4 +180,4 @@ All operations are logged to `C:\ProgramData\GeolocationAddin\geolocation.log`.
 
 ## License
 
-All rights reserved.
+[MIT](LICENSE)
