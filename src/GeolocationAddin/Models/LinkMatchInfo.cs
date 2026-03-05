@@ -15,6 +15,7 @@ namespace GeolocationAddin.Models
         private bool _isSelected;
         private string _targetFileName;
         private string _label;
+        private string _exportViewName;
         private string _validationError;
 
         public string InstanceName { get; set; }
@@ -54,6 +55,19 @@ namespace GeolocationAddin.Models
                 {
                     _label = value;
                     OnPropertyChanged(nameof(Label));
+                }
+            }
+        }
+
+        public string ExportViewName
+        {
+            get => _exportViewName;
+            set
+            {
+                if (_exportViewName != value)
+                {
+                    _exportViewName = value;
+                    OnPropertyChanged(nameof(ExportViewName));
                 }
             }
         }

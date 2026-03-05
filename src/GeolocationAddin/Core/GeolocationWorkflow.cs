@@ -156,11 +156,11 @@ namespace GeolocationAddin.Core
             return list;
         }
 
-        private void ApplyImportedMappings(List<LinkMatchInfo> links, List<(string linkName, string targetFileName, string label)> imported)
+        private void ApplyImportedMappings(List<LinkMatchInfo> links, List<(string linkName, string targetFileName, string label, string exportViewName)> imported)
         {
             var fuzzySettings = _config.FuzzyMatchSettings;
 
-            foreach (var (linkName, targetFileName, label) in imported)
+            foreach (var (linkName, targetFileName, label, exportViewName) in imported)
             {
                 // Try exact match on InstanceName
                 var exact = links.FirstOrDefault(l =>
@@ -170,6 +170,7 @@ namespace GeolocationAddin.Core
                 {
                     exact.TargetFileName = targetFileName;
                     exact.Label = label;
+                    exact.ExportViewName = exportViewName;
                     exact.MatchedImportKey = linkName;
                     exact.MatchType = MatchType.Exact;
                     exact.IsSelected = true;
@@ -197,6 +198,7 @@ namespace GeolocationAddin.Core
 
                         match.TargetFileName = targetFileName;
                         match.Label = label;
+                        match.ExportViewName = exportViewName;
                         match.MatchedImportKey = linkName;
                         match.MatchType = MatchType.Fuzzy;
                         LogHelper.Info($"Fuzzy match: \"{linkName}\" -> \"{fuzzyResult.MatchedKey}\" -> \"{targetFileName}\"");
@@ -241,6 +243,7 @@ namespace GeolocationAddin.Core
                         TargetFileName = match.TargetFileName,
                         TargetFilePath = Path.Combine(resolvedOutputFolder, match.TargetFileName),
                         Label = match.Label,
+                        ExportViewName = match.ExportViewName,
                         TotalTransform = instance.GetTotalTransform()
                     };
 
@@ -383,13 +386,13 @@ namespace GeolocationAddin.Core
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
-                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, resolvedIfcFolder, baseName);
+                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, resolvedIfcFolder, baseName, linkInfo.ExportViewName);
 
                 if (_config.ExportSettings.ExportNwc)
-                    result.NwcExported = ModelExporter.ExportNwc(exportDoc, resolvedNwcFolder, baseName);
+                    result.NwcExported = ModelExporter.ExportNwc(exportDoc, resolvedNwcFolder, baseName, linkInfo.ExportViewName);
 
                 if (_config.ExportSettings.ExportDwg)
-                    result.DwgExported = ModelExporter.ExportDwg(exportDoc, resolvedDwgFolder, baseName);
+                    result.DwgExported = ModelExporter.ExportDwg(exportDoc, resolvedDwgFolder, baseName, linkInfo.ExportViewName);
 
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");

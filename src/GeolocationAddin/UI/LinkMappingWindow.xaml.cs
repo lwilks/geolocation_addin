@@ -75,11 +75,11 @@ namespace GeolocationAddin.UI
 
         #region Import / Export
 
-        public void MergeImportedMappings(List<(string linkName, string targetFileName, string label)> imported)
+        public void MergeImportedMappings(List<(string linkName, string targetFileName, string label, string exportViewName)> imported)
         {
             var fuzzySettings = _config.FuzzyMatchSettings;
 
-            foreach (var (linkName, targetFileName, label) in imported)
+            foreach (var (linkName, targetFileName, label, exportViewName) in imported)
             {
                 // Try exact match on InstanceName
                 var exact = _links.FirstOrDefault(l =>
@@ -89,6 +89,7 @@ namespace GeolocationAddin.UI
                 {
                     exact.TargetFileName = targetFileName;
                     exact.Label = label;
+                    exact.ExportViewName = exportViewName;
                     exact.MatchedImportKey = linkName;
                     exact.MatchType = MatchType.Exact;
                     exact.IsSelected = true;
@@ -115,6 +116,7 @@ namespace GeolocationAddin.UI
 
                         match.TargetFileName = targetFileName;
                         match.Label = label;
+                        match.ExportViewName = exportViewName;
                         match.MatchedImportKey = linkName;
                         match.MatchType = MatchType.Fuzzy;
                         // Fuzzy matches are not auto-selected — user reviews
@@ -165,7 +167,7 @@ namespace GeolocationAddin.UI
             {
                 var mappings = _links
                     .Where(l => l.HasTargetFileName)
-                    .Select(l => (l.InstanceName, l.TargetFileName, l.Label ?? ""))
+                    .Select(l => (l.InstanceName, l.TargetFileName, l.Label ?? "", l.ExportViewName ?? ""))
                     .ToList();
 
                 MappingSerializer.Export(dialog.FileName, mappings);
@@ -200,6 +202,7 @@ namespace GeolocationAddin.UI
             {
                 link.TargetFileName = null;
                 link.Label = null;
+                link.ExportViewName = null;
                 link.MatchedImportKey = null;
                 link.MatchType = MatchType.None;
             }

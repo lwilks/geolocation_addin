@@ -8,7 +8,29 @@ namespace GeolocationAddin.Core
 {
     public static class ModelExporter
     {
-        public static bool ExportIfc(Document doc, string outputFolder, string fileNameWithoutExtension)
+        private static View3D Find3DView(Document doc, string viewName)
+        {
+            if (!string.IsNullOrWhiteSpace(viewName))
+            {
+                var named = new FilteredElementCollector(doc)
+                    .OfClass(typeof(View3D))
+                    .Cast<View3D>()
+                    .FirstOrDefault(v => !v.IsTemplate &&
+                        string.Equals(v.Name, viewName, StringComparison.OrdinalIgnoreCase));
+
+                if (named != null)
+                    return named;
+
+                LogHelper.Info($"Export view '{viewName}' not found — falling back to first 3D view.");
+            }
+
+            return new FilteredElementCollector(doc)
+                .OfClass(typeof(View3D))
+                .Cast<View3D>()
+                .FirstOrDefault(v => !v.IsTemplate);
+        }
+
+        public static bool ExportIfc(Document doc, string outputFolder, string fileNameWithoutExtension, string exportViewName = null)
         {
             try
             {
@@ -17,6 +39,10 @@ namespace GeolocationAddin.Core
                     tx.Start();
 
                     var options = new IFCExportOptions();
+
+                    var view3d = Find3DView(doc, exportViewName);
+                    if (view3d != null)
+                        options.FilterViewId = view3d.Id;
 
                     doc.Export(outputFolder, fileNameWithoutExtension, options);
 
@@ -40,7 +66,7 @@ namespace GeolocationAddin.Core
             }
         }
 
-        public static bool ExportNwc(Document doc, string outputFolder, string fileNameWithoutExtension)
+        public static bool ExportNwc(Document doc, string outputFolder, string fileNameWithoutExtension, string exportViewName = null)
         {
             try
             {
@@ -50,10 +76,18 @@ namespace GeolocationAddin.Core
                     return false;
                 }
 
-                var options = new NavisworksExportOptions
+                var view3d = Find3DView(doc, exportViewName);
+
+                var options = new NavisworksExportOptions();
+                if (view3d != null)
                 {
-                    ExportScope = NavisworksExportScope.Model
-                };
+                    options.ExportScope = NavisworksExportScope.View;
+                    options.ViewId = view3d.Id;
+                }
+                else
+                {
+                    options.ExportScope = NavisworksExportScope.Model;
+                }
 
                 doc.Export(outputFolder, fileNameWithoutExtension, options);
                 LogHelper.Info("NWC Export() completed.");
@@ -89,15 +123,11 @@ namespace GeolocationAddin.Core
             }
         }
 
-        public static bool ExportDwg(Document doc, string outputFolder, string fileNameWithoutExtension)
+        public static bool ExportDwg(Document doc, string outputFolder, string fileNameWithoutExtension, string exportViewName = null)
         {
             try
             {
-                // Find the default 3D view to export
-                var view3d = new FilteredElementCollector(doc)
-                    .OfClass(typeof(View3D))
-                    .Cast<View3D>()
-                    .FirstOrDefault(v => !v.IsTemplate);
+                var view3d = Find3DView(doc, exportViewName);
 
                 if (view3d == null)
                 {
