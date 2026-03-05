@@ -20,5 +20,15 @@ namespace GeolocationAddin.Helpers
         {
             return Path.GetFullPath(Path.Combine(folder, fileName));
         }
+
+        public static string ResolveLabel(string path, string label)
+        {
+            if (string.IsNullOrEmpty(path) || !path.Contains("<LABEL>"))
+                return path;
+
+            var resolved = path.Replace("<LABEL>", label ?? "");
+            resolved = resolved.Replace("\\\\", "\\");
+            return resolved;
+        }
     }
 }

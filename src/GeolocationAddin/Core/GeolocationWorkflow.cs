@@ -156,11 +156,11 @@ namespace GeolocationAddin.Core
             return list;
         }
 
-        private void ApplyImportedMappings(List<LinkMatchInfo> links, List<(string linkName, string targetFileName)> imported)
+        private void ApplyImportedMappings(List<LinkMatchInfo> links, List<(string linkName, string targetFileName, string label)> imported)
         {
             var fuzzySettings = _config.FuzzyMatchSettings;
 
-            foreach (var (linkName, targetFileName) in imported)
+            foreach (var (linkName, targetFileName, label) in imported)
             {
                 // Try exact match on InstanceName
                 var exact = links.FirstOrDefault(l =>
@@ -169,6 +169,7 @@ namespace GeolocationAddin.Core
                 if (exact != null)
                 {
                     exact.TargetFileName = targetFileName;
+                    exact.Label = label;
                     exact.MatchedImportKey = linkName;
                     exact.MatchType = MatchType.Exact;
                     exact.IsSelected = true;
@@ -195,6 +196,7 @@ namespace GeolocationAddin.Core
                             string.Equals(l.InstanceName, fuzzyResult.MatchedKey, StringComparison.OrdinalIgnoreCase));
 
                         match.TargetFileName = targetFileName;
+                        match.Label = label;
                         match.MatchedImportKey = linkName;
                         match.MatchType = MatchType.Fuzzy;
                         LogHelper.Info($"Fuzzy match: \"{linkName}\" -> \"{fuzzyResult.MatchedKey}\" -> \"{targetFileName}\"");
@@ -226,6 +228,8 @@ namespace GeolocationAddin.Core
 
                     var sourcePath = FileCopyManager.ResolveLinkFilePath(linkType, _config.LinkSourceFolder);
 
+                    var resolvedOutputFolder = PathHelper.ResolveLabel(_config.OutputFolder, match.Label);
+
                     var info = new LinkInstanceInfo
                     {
                         Instance = instance,
@@ -235,7 +239,8 @@ namespace GeolocationAddin.Core
                         InstanceName = instanceName,
                         SourceFilePath = sourcePath,
                         TargetFileName = match.TargetFileName,
-                        TargetFilePath = Path.Combine(_config.OutputFolder, match.TargetFileName),
+                        TargetFilePath = Path.Combine(resolvedOutputFolder, match.TargetFileName),
+                        Label = match.Label,
                         TotalTransform = instance.GetTotalTransform()
                     };
 
@@ -326,7 +331,22 @@ namespace GeolocationAddin.Core
             var targetFileName = linkInfo.TargetFileName;
             if (!targetFileName.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase))
                 targetFileName += ".rvt";
-            linkInfo.TargetFilePath = Path.Combine(_config.OutputFolder, targetFileName);
+
+            var label = linkInfo.Label;
+            var resolvedOutputFolder = PathHelper.ResolveLabel(_config.OutputFolder, label);
+            var resolvedIfcFolder = PathHelper.ResolveLabel(_config.IfcOutputFolder, label);
+            var resolvedNwcFolder = PathHelper.ResolveLabel(_config.NwcOutputFolder, label);
+            var resolvedDwgFolder = PathHelper.ResolveLabel(_config.DwgOutputFolder, label);
+
+            linkInfo.TargetFilePath = Path.Combine(resolvedOutputFolder, targetFileName);
+
+            Directory.CreateDirectory(resolvedOutputFolder);
+            if (_config.ExportSettings.ExportIfc && !string.IsNullOrEmpty(resolvedIfcFolder))
+                Directory.CreateDirectory(resolvedIfcFolder);
+            if (_config.ExportSettings.ExportNwc && !string.IsNullOrEmpty(resolvedNwcFolder))
+                Directory.CreateDirectory(resolvedNwcFolder);
+            if (_config.ExportSettings.ExportDwg && !string.IsNullOrEmpty(resolvedDwgFolder))
+                Directory.CreateDirectory(resolvedDwgFolder);
 
             Document exportDoc = null;
             bool isCloudDoc = false;
@@ -363,13 +383,13 @@ namespace GeolocationAddin.Core
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
-                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, _config.IfcOutputFolder, baseName);
+                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, resolvedIfcFolder, baseName);
 
                 if (_config.ExportSettings.ExportNwc)
-                    result.NwcExported = ModelExporter.ExportNwc(exportDoc, _config.NwcOutputFolder, baseName);
+                    result.NwcExported = ModelExporter.ExportNwc(exportDoc, resolvedNwcFolder, baseName);
 
                 if (_config.ExportSettings.ExportDwg)
-                    result.DwgExported = ModelExporter.ExportDwg(exportDoc, _config.DwgOutputFolder, baseName);
+                    result.DwgExported = ModelExporter.ExportDwg(exportDoc, resolvedDwgFolder, baseName);
 
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");

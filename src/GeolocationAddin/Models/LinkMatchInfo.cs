@@ -14,6 +14,7 @@ namespace GeolocationAddin.Models
     {
         private bool _isSelected;
         private string _targetFileName;
+        private string _label;
         private string _validationError;
 
         public string InstanceName { get; set; }
@@ -43,6 +44,19 @@ namespace GeolocationAddin.Models
         }
 
         public bool HasTargetFileName => !string.IsNullOrWhiteSpace(_targetFileName);
+
+        public string Label
+        {
+            get => _label;
+            set
+            {
+                if (_label != value)
+                {
+                    _label = value;
+                    OnPropertyChanged(nameof(Label));
+                }
+            }
+        }
 
         public bool IsSelected
         {

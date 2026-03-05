@@ -9,7 +9,7 @@ namespace GeolocationAddin.Helpers
 {
     public static class MappingSerializer
     {
-        public static List<(string linkName, string targetFileName)> Import(string path)
+        public static List<(string linkName, string targetFileName, string label)> Import(string path)
         {
             var ext = Path.GetExtension(path);
             if (string.Equals(ext, ".xml", StringComparison.OrdinalIgnoreCase))
@@ -18,7 +18,7 @@ namespace GeolocationAddin.Helpers
             return ImportCsv(path);
         }
 
-        public static void Export(string path, IEnumerable<(string linkName, string targetFileName)> mappings)
+        public static void Export(string path, IEnumerable<(string linkName, string targetFileName, string label)> mappings)
         {
             var ext = Path.GetExtension(path);
             if (string.Equals(ext, ".xml", StringComparison.OrdinalIgnoreCase))
@@ -27,9 +27,9 @@ namespace GeolocationAddin.Helpers
                 ExportCsv(path, mappings);
         }
 
-        public static List<(string linkName, string targetFileName)> ImportCsv(string path)
+        public static List<(string linkName, string targetFileName, string label)> ImportCsv(string path)
         {
-            var results = new List<(string, string)>();
+            var results = new List<(string, string, string)>();
             var lines = File.ReadAllLines(path);
 
             // Skip header row
@@ -45,19 +45,20 @@ namespace GeolocationAddin.Helpers
 
                 var linkName = parts[0].Trim();
                 var targetName = parts[1].Trim();
+                var label = parts.Length >= 3 ? parts[2].Trim() : "";
 
                 if (string.IsNullOrEmpty(linkName) || string.IsNullOrEmpty(targetName))
                     continue;
 
-                results.Add((linkName, targetName));
+                results.Add((linkName, targetName, label));
             }
 
             return results;
         }
 
-        public static List<(string linkName, string targetFileName)> ImportXml(string path)
+        public static List<(string linkName, string targetFileName, string label)> ImportXml(string path)
         {
-            var results = new List<(string, string)>();
+            var results = new List<(string, string, string)>();
             var doc = XDocument.Load(path);
 
             var root = doc.Root;
@@ -68,35 +69,37 @@ namespace GeolocationAddin.Helpers
             {
                 var linkName = (string)el.Attribute("LinkName");
                 var targetName = (string)el.Attribute("TargetFileName");
+                var label = (string)el.Attribute("Label") ?? "";
 
                 if (string.IsNullOrEmpty(linkName) || string.IsNullOrEmpty(targetName))
                     continue;
 
-                results.Add((linkName, targetName));
+                results.Add((linkName, targetName, label));
             }
 
             return results;
         }
 
-        public static void ExportCsv(string path, IEnumerable<(string linkName, string targetFileName)> mappings)
+        public static void ExportCsv(string path, IEnumerable<(string linkName, string targetFileName, string label)> mappings)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("LinkName,TargetFileName");
+            sb.AppendLine("LinkName,TargetFileName,Label");
 
-            foreach (var (linkName, targetFileName) in mappings)
-                sb.AppendLine($"{linkName},{targetFileName}");
+            foreach (var (linkName, targetFileName, label) in mappings)
+                sb.AppendLine($"{linkName},{targetFileName},{label}");
 
             File.WriteAllText(path, sb.ToString());
         }
 
-        public static void ExportXml(string path, IEnumerable<(string linkName, string targetFileName)> mappings)
+        public static void ExportXml(string path, IEnumerable<(string linkName, string targetFileName, string label)> mappings)
         {
             var doc = new XDocument(
                 new XElement("LinkMappings",
                     mappings.Select(m =>
                         new XElement("Mapping",
                             new XAttribute("LinkName", m.linkName),
-                            new XAttribute("TargetFileName", m.targetFileName)))));
+                            new XAttribute("TargetFileName", m.targetFileName),
+                            new XAttribute("Label", m.label)))));
 
             doc.Save(path);
         }

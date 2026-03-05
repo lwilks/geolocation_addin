@@ -75,11 +75,11 @@ namespace GeolocationAddin.UI
 
         #region Import / Export
 
-        public void MergeImportedMappings(List<(string linkName, string targetFileName)> imported)
+        public void MergeImportedMappings(List<(string linkName, string targetFileName, string label)> imported)
         {
             var fuzzySettings = _config.FuzzyMatchSettings;
 
-            foreach (var (linkName, targetFileName) in imported)
+            foreach (var (linkName, targetFileName, label) in imported)
             {
                 // Try exact match on InstanceName
                 var exact = _links.FirstOrDefault(l =>
@@ -88,6 +88,7 @@ namespace GeolocationAddin.UI
                 if (exact != null)
                 {
                     exact.TargetFileName = targetFileName;
+                    exact.Label = label;
                     exact.MatchedImportKey = linkName;
                     exact.MatchType = MatchType.Exact;
                     exact.IsSelected = true;
@@ -113,6 +114,7 @@ namespace GeolocationAddin.UI
                             string.Equals(l.InstanceName, fuzzyResult.MatchedKey, StringComparison.OrdinalIgnoreCase));
 
                         match.TargetFileName = targetFileName;
+                        match.Label = label;
                         match.MatchedImportKey = linkName;
                         match.MatchType = MatchType.Fuzzy;
                         // Fuzzy matches are not auto-selected — user reviews
@@ -163,7 +165,7 @@ namespace GeolocationAddin.UI
             {
                 var mappings = _links
                     .Where(l => l.HasTargetFileName)
-                    .Select(l => (l.InstanceName, l.TargetFileName))
+                    .Select(l => (l.InstanceName, l.TargetFileName, l.Label ?? ""))
                     .ToList();
 
                 MappingSerializer.Export(dialog.FileName, mappings);
@@ -197,6 +199,7 @@ namespace GeolocationAddin.UI
             foreach (var link in _links)
             {
                 link.TargetFileName = null;
+                link.Label = null;
                 link.MatchedImportKey = null;
                 link.MatchType = MatchType.None;
             }
