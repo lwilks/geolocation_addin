@@ -145,7 +145,7 @@ namespace GeolocationAddin.Core
                         .OfClass(typeof(RevitLinkInstance))
                         .WhereElementIsNotElementType()
                         .ToElementIds()
-                        .Where(id => view3d.CanBeHidden(doc.GetElement(id)))
+                        .Where(id => doc.GetElement(id).CanBeHidden(view3d))
                         .ToList();
 
                     if (linkIds.Count > 0)
