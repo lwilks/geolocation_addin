@@ -99,6 +99,26 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Label" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                                                 BorderThickness="0" Background="Transparent"
+                                                 VerticalContentAlignment="Center"
+                                                 Padding="2,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Export View" Width="140">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding ExportViewName, UpdateSourceTrigger=PropertyChanged}"
+                                                 BorderThickness="0" Background="Transparent"
+                                                 VerticalContentAlignment="Center"
+                                                 Padding="2,0"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

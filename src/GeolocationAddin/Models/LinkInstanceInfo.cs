@@ -13,6 +13,8 @@ namespace GeolocationAddin.Models
         public string SourceFilePath { get; set; }
         public string TargetFileName { get; set; }
         public string TargetFilePath { get; set; }
+        public string Label { get; set; }
+        public string ExportViewName { get; set; }
         public Transform TotalTransform { get; set; }
 
         // Cloud model path (e.g. "Autodesk Docs://...") for ACC/BIM360 links
