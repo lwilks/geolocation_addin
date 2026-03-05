@@ -214,6 +214,7 @@ namespace GeolocationAddin.UI
 
         private void ProcessSelected_Click(object sender, RoutedEventArgs e)
         {
+            SaveSettingsToConfig();
             Confirmed = true;
             DialogResult = true;
             Close();

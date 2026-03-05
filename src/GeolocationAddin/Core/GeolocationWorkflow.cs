@@ -16,7 +16,7 @@ namespace GeolocationAddin.Core
     public class GeolocationWorkflow
     {
         private readonly UIApplication _uiApp;
-        private readonly AddinConfig _config;
+        private AddinConfig _config;
 
         public GeolocationWorkflow(UIApplication uiApp, AddinConfig config)
         {
@@ -83,6 +83,9 @@ namespace GeolocationAddin.Core
                 LogHelper.Info("User cancelled link mapping.");
                 return;
             }
+
+            // Apply any settings the user changed in the mapping window
+            _config = mappingWindow.Config;
 
             // 6. Build full info from selected links
             var linkInfos = BuildLinkInfoListFromSelection(siteDoc, matchList);
