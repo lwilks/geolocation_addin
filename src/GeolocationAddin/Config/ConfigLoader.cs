@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using GeolocationAddin.Helpers;
 using Newtonsoft.Json;
 
 namespace GeolocationAddin.Config
@@ -42,6 +43,10 @@ namespace GeolocationAddin.Config
                 if (string.IsNullOrWhiteSpace(config.IfcOutputFolder))
                     throw new ConfigurationException("ifcOutputFolder is required when IFC export is enabled.");
                 EnsureDirectory(config.IfcOutputFolder, "ifcOutputFolder");
+
+                if (!string.IsNullOrWhiteSpace(config.ExportSettings.IfcExportConfigPath) &&
+                    !File.Exists(config.ExportSettings.IfcExportConfigPath))
+                    LogHelper.Info($"Warning: ifcExportConfigPath not found, IFC export will use defaults: {config.ExportSettings.IfcExportConfigPath}");
             }
 
             if (config.ExportSettings.ExportNwc)

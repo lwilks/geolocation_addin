@@ -1,0 +1,15 @@
+{
+  "IFCVersion": "IFC4RV",
+  "SpaceBoundaries": 1,
+  "ExportBaseQuantities": true,
+  "SplitWallsAndColumns": false,
+  "Export2DElements": false,
+  "ExportInternalRevitPropertySets": false,
+  "ExportIFCCommonPropertySets": true,
+  "ExportSchedulesAsPsets": false,
+  "ExportLinkedFiles": false,
+  "IncludeSiteElevation": true,
+  "StoreIFCGUID": true,
+  "UseActiveViewGeometry": true,
+  "TessellationLevelOfDetail": "0.5"
+}

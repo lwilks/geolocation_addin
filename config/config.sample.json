@@ -9,7 +9,8 @@
   "exportSettings": {
     "exportIfc": true,
     "exportNwc": true,
-    "exportDwg": true
+    "exportDwg": true,
+    "ifcExportConfigPath": "C:\\ProgramData\\GeolocationAddin\\ifc-export-config.json"
   },
   "fuzzyMatchSettings": {
     "enabled": true,

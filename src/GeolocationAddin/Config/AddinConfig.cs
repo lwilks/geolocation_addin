@@ -42,6 +42,9 @@ namespace GeolocationAddin.Config
 
         [JsonProperty("exportDwg")]
         public bool ExportDwg { get; set; } = true;
+
+        [JsonProperty("ifcExportConfigPath")]
+        public string IfcExportConfigPath { get; set; }
     }
 
     public class FuzzyMatchSettings

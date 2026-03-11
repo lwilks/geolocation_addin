@@ -98,6 +98,20 @@
                                   Checked="ExportCheck_Changed" Unchecked="ExportCheck_Changed"/>
                         <CheckBox x:Name="ExportDwgCheck" Content="Export DWG" Margin="0,2"
                                   Checked="ExportCheck_Changed" Unchecked="ExportCheck_Changed"/>
+
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="IFC Config File:"
+                                       VerticalAlignment="Center" Margin="0,2"/>
+                            <TextBox Grid.Column="1" x:Name="IfcExportConfigPathBox"
+                                     Height="24" Margin="0,2" VerticalContentAlignment="Center"/>
+                            <Button Grid.Column="2" Style="{StaticResource BrowseButton}"
+                                    Click="BrowseIfcConfigPath_Click"/>
+                        </Grid>
                     </StackPanel>
                 </GroupBox>
 
