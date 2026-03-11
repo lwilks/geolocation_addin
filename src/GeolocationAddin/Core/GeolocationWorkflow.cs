@@ -389,7 +389,7 @@ namespace GeolocationAddin.Core
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
-                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, resolvedIfcFolder, baseName, linkInfo.ExportViewName);
+                    result.IfcExported = ModelExporter.ExportIfc(exportDoc, resolvedIfcFolder, baseName, linkInfo.ExportViewName, _config.ExportSettings.IfcExportConfigPath);
 
                 if (_config.ExportSettings.ExportNwc)
                     result.NwcExported = ModelExporter.ExportNwc(exportDoc, resolvedNwcFolder, baseName, linkInfo.ExportViewName);

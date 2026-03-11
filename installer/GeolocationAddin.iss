@@ -39,6 +39,7 @@ Source: "{#BuildOutput}\Newtonsoft.Json.dll"; DestDir: "{app}"; Flags: ignorever
 ; Sample config files -> ProgramData (don't overwrite existing)
 Source: "{#ConfigSamples}\config.sample.json"; DestDir: "{commonappdata}\GeolocationAddin"; DestName: "config.json"; Flags: onlyifdoesntexist uninsneveruninstall
 Source: "{#ConfigSamples}\mapping.sample.csv"; DestDir: "{commonappdata}\GeolocationAddin"; DestName: "mapping.csv"; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "{#ConfigSamples}\ifc-export-config.sample.json"; DestDir: "{commonappdata}\GeolocationAddin"; DestName: "ifc-export-config.json"; Flags: onlyifdoesntexist uninsneveruninstall
 
 [Dirs]
 Name: "{commonappdata}\GeolocationAddin"; Flags: uninsneveruninstall

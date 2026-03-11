@@ -243,6 +243,7 @@ namespace GeolocationAddin.UI
             ExportIfcCheck.IsChecked = _config.ExportSettings.ExportIfc;
             ExportNwcCheck.IsChecked = _config.ExportSettings.ExportNwc;
             ExportDwgCheck.IsChecked = _config.ExportSettings.ExportDwg;
+            IfcExportConfigPathBox.Text = _config.ExportSettings.IfcExportConfigPath ?? "";
 
             FuzzyEnabledCheck.IsChecked = _config.FuzzyMatchSettings.Enabled;
             TokenThresholdSlider.Value = _config.FuzzyMatchSettings.TokenOverlapThreshold;
@@ -263,6 +264,7 @@ namespace GeolocationAddin.UI
             _config.ExportSettings.ExportIfc = ExportIfcCheck.IsChecked == true;
             _config.ExportSettings.ExportNwc = ExportNwcCheck.IsChecked == true;
             _config.ExportSettings.ExportDwg = ExportDwgCheck.IsChecked == true;
+            _config.ExportSettings.IfcExportConfigPath = string.IsNullOrWhiteSpace(IfcExportConfigPathBox.Text) ? null : IfcExportConfigPathBox.Text.Trim();
 
             _config.FuzzyMatchSettings.Enabled = FuzzyEnabledCheck.IsChecked == true;
             _config.FuzzyMatchSettings.TokenOverlapThreshold = TokenThresholdSlider.Value;
@@ -272,6 +274,7 @@ namespace GeolocationAddin.UI
         private void UpdateExportFieldStates()
         {
             IfcOutputFolderBox.IsEnabled = ExportIfcCheck.IsChecked == true;
+            IfcExportConfigPathBox.IsEnabled = ExportIfcCheck.IsChecked == true;
             NwcOutputFolderBox.IsEnabled = ExportNwcCheck.IsChecked == true;
             DwgOutputFolderBox.IsEnabled = ExportDwgCheck.IsChecked == true;
         }
@@ -296,6 +299,18 @@ namespace GeolocationAddin.UI
                 MessageBox.Show($"Failed to save settings:\n\n{ex.Message}",
                     "Save Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void BrowseIfcConfigPath_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                Title = "Select IFC Export Configuration File"
+            };
+
+            if (dialog.ShowDialog() == true)
+                IfcExportConfigPathBox.Text = dialog.FileName;
         }
 
         private void BrowseCsvPath_Click(object sender, RoutedEventArgs e)

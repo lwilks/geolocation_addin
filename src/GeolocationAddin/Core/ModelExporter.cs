@@ -30,7 +30,7 @@ namespace GeolocationAddin.Core
                 .FirstOrDefault(v => !v.IsTemplate);
         }
 
-        public static bool ExportIfc(Document doc, string outputFolder, string fileNameWithoutExtension, string exportViewName = null)
+        public static bool ExportIfc(Document doc, string outputFolder, string fileNameWithoutExtension, string exportViewName = null, string ifcExportConfigPath = null)
         {
             try
             {
@@ -43,6 +43,8 @@ namespace GeolocationAddin.Core
                     var view3d = Find3DView(doc, exportViewName);
                     if (view3d != null)
                         options.FilterViewId = view3d.Id;
+
+                    IfcConfigLoader.ApplyConfigFile(options, ifcExportConfigPath);
 
                     doc.Export(outputFolder, fileNameWithoutExtension, options);
 
