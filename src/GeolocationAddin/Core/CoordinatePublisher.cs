@@ -9,6 +9,8 @@ namespace GeolocationAddin.Core
     {
         /// <summary>
         /// Strategy A: Relink the type to the copied file, publish coordinates, then restore.
+        /// This establishes a named shared coordinate position in the copy, enabling
+        /// Revit's "By Shared Coordinates" linking between output models.
         /// LoadFrom must be called outside any transaction. PublishCoordinates needs a transaction.
         /// </summary>
         public static bool PublishViaRelink(Document siteDoc, LinkInstanceInfo linkInfo)
@@ -26,13 +28,36 @@ namespace GeolocationAddin.Core
 
                 LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");
 
-                // 2. Publish shared coordinates (requires a transaction)
+                // Force Revit to update internal references after LoadFrom
+                siteDoc.Regenerate();
+
+                // 2. Get the linked document's active ProjectLocation — PublishCoordinates
+                //    needs a LinkElementId that identifies both the link instance and the
+                //    target ProjectLocation in the linked model.
+                var linkInstance = siteDoc.GetElement(linkInfo.InstanceId) as RevitLinkInstance;
+                if (linkInstance == null)
+                    throw new InvalidOperationException("Could not resolve RevitLinkInstance after LoadFrom.");
+
+                var linkDoc = linkInstance.GetLinkDocument();
+                if (linkDoc == null)
+                    throw new InvalidOperationException("GetLinkDocument() returned null — linked model not loaded.");
+
+                var linkedLocation = linkDoc.ActiveProjectLocation;
+                LogHelper.Info($"Linked doc active location: '{linkedLocation.Name}' (Id={linkedLocation.Id})");
+                LogHelper.Info($"Link instance Id={linkInfo.InstanceId}, type Id={linkInfo.TypeId}");
+
+                // 3. Publish shared coordinates (requires a transaction)
                 using (var tx = new Transaction(siteDoc, "Publish Coordinates"))
                 {
                     tx.Start();
 
-                    // Two-arg constructor sets LinkInstanceId (not HostElementId)
-                    var linkElementId = new LinkElementId(linkInfo.InstanceId, ElementId.InvalidElementId);
+                    // The two-arg constructor LinkElementId(linkInstanceId, linkedElementId) sets
+                    // LinkInstanceId and LinkedElementId — both are required by PublishCoordinates.
+                    var linkElementId = new LinkElementId(linkInfo.InstanceId, linkedLocation.Id);
+                    LogHelper.Info($"LinkElementId: HostElementId={linkElementId.HostElementId}, " +
+                                   $"LinkInstanceId={linkElementId.LinkInstanceId}, " +
+                                   $"LinkedElementId={linkElementId.LinkedElementId}");
+
                     siteDoc.PublishCoordinates(linkElementId);
 
                     tx.Commit();
@@ -49,7 +74,7 @@ namespace GeolocationAddin.Core
             }
             finally
             {
-                // 3. Restore original link — use Reload() for cloud links
+                // 4. Restore original link — use Reload() for cloud links
                 if (loadFromSucceeded)
                 {
                     try
