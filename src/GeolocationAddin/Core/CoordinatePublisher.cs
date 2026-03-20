@@ -68,7 +68,7 @@ namespace GeolocationAddin.Core
                     try
                     {
                         string siteName = Path.GetFileNameWithoutExtension(siteDoc.Title);
-                        var namedLocation = ProjectLocation.Create(copiedDoc, copiedDoc.SiteLocation, siteName);
+                        var namedLocation = ProjectLocation.Create(copiedDoc, copiedDoc.SiteLocation.Id, siteName);
                         namedLocation.SetProjectPosition(XYZ.Zero, position);
                         LogHelper.Info($"Created named shared position: '{siteName}'");
                     }
