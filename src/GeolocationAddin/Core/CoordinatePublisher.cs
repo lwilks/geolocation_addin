@@ -60,6 +60,34 @@ namespace GeolocationAddin.Core
                     tx.Commit();
                 }
 
+                // 4. Save the linked document to persist the published coordinates to disk.
+                // PublishCoordinates modifies the linked doc in memory (adds a named position),
+                // but Reload() will discard those changes unless we save first.
+                try
+                {
+                    linkDoc.Save();
+                    LogHelper.Info("Saved linked document with published coordinates.");
+                }
+                catch (Exception saveEx)
+                {
+                    LogHelper.Info($"linkDoc.Save() failed ({saveEx.Message}), trying SaveAs...");
+                    try
+                    {
+                        var saveAsOpts = new SaveAsOptions { OverwriteExistingFile = true, MaximumBackups = 1 };
+                        if (linkDoc.IsWorkshared)
+                        {
+                            var wsOpts = new WorksharingSaveAsOptions { SaveAsCentral = true };
+                            saveAsOpts.SetWorksharingOptions(wsOpts);
+                        }
+                        linkDoc.SaveAs(linkInfo.TargetFilePath, saveAsOpts);
+                        LogHelper.Info("SaveAs linked document with published coordinates.");
+                    }
+                    catch (Exception saveAsEx)
+                    {
+                        LogHelper.Error($"Could not persist published coordinates: {saveAsEx.Message}");
+                    }
+                }
+
                 LogHelper.Info($"Published coordinates to: {linkInfo.TargetFileName}");
 
                 return true;
