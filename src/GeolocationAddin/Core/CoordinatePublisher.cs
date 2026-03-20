@@ -31,7 +31,8 @@ namespace GeolocationAddin.Core
                 {
                     tx.Start();
 
-                    var linkElementId = new LinkElementId(linkInfo.InstanceId);
+                    // Two-arg constructor sets LinkInstanceId (not HostElementId)
+                    var linkElementId = new LinkElementId(linkInfo.InstanceId, ElementId.InvalidElementId);
                     siteDoc.PublishCoordinates(linkElementId);
 
                     tx.Commit();

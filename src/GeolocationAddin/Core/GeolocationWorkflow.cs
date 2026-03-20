@@ -370,7 +370,9 @@ namespace GeolocationAddin.Core
                 result.CoordinatesPublished = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
 
                 // === Phase 4: Reopen local copy for export (and Strategy B fallback) ===
-                exportDoc = RevitDocumentHelper.OpenDocumentDetached(_uiApp, linkInfo.TargetFilePath);
+                // Must use OpenAndActivateDocument — Application.OpenDocumentFile can return
+                // the cached linked document after LoadFrom/Reload instead of a primary document.
+                exportDoc = RevitDocumentHelper.OpenDocumentDetachedAsActive(_uiApp, linkInfo.TargetFilePath);
                 LogHelper.Info("Reopened local copy for export.");
 
                 if (!result.CoordinatesPublished)
@@ -398,6 +400,8 @@ namespace GeolocationAddin.Core
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");
 
+                // Copy was opened via OpenAndActivateDocument — activate site doc before closing
+                RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
                 exportDoc.Close(false);
                 exportDoc = null;
             }
@@ -407,7 +411,12 @@ namespace GeolocationAddin.Core
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
                 {
-                    try { exportDoc.Close(false); } catch { }
+                    try
+                    {
+                        RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+                        exportDoc.Close(false);
+                    }
+                    catch { }
                 }
             }
 

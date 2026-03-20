@@ -52,6 +52,26 @@ namespace GeolocationAddin.Helpers
         }
 
         /// <summary>
+        /// Opens a local file detached as the active UI document (primary, not linked).
+        /// Use this instead of OpenDocumentDetached when the file may have been previously
+        /// loaded as a link — Application.OpenDocumentFile can return the cached linked
+        /// document, while OpenAndActivateDocument always opens as a primary document.
+        /// </summary>
+        public static Document OpenDocumentDetachedAsActive(UIApplication uiApp, string filePath)
+        {
+            var modelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(filePath);
+            var openOptions = new OpenOptions();
+
+            openOptions.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets;
+
+            var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
+            openOptions.SetOpenWorksetsConfiguration(worksetConfig);
+
+            var uiDoc = uiApp.OpenAndActivateDocument(modelPath, openOptions, false);
+            return uiDoc.Document;
+        }
+
+        /// <summary>
         /// Attempts to reactivate a document that is already open in the Revit session.
         /// Used to switch the active document away from an export doc so it can be closed.
         /// </summary>
