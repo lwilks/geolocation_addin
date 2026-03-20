@@ -28,9 +28,6 @@ namespace GeolocationAddin.Core
 
                 LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");
 
-                // Force Revit to update internal references after LoadFrom
-                siteDoc.Regenerate();
-
                 // 2. Get the linked document's active ProjectLocation — PublishCoordinates
                 //    needs a LinkElementId that identifies both the link instance and the
                 //    target ProjectLocation in the linked model.
