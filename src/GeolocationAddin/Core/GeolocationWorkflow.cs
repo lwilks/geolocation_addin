@@ -388,24 +388,6 @@ namespace GeolocationAddin.Core
 
                 exportDoc.Close(false);
                 exportDoc = null;
-
-                // === Phase 4: Publish shared coordinate relationship ===
-                // Strategy B set the correct coordinate values. Now use Strategy A
-                // (LoadFrom → PublishCoordinates → Reload) to establish the named shared
-                // coordinate position that Revit requires for "By Shared Coordinates" linking.
-                // The copy must be closed for LoadFrom to access the file on disk.
-                LogHelper.Info("Attempting to publish shared coordinate relationship (Strategy A)...");
-                bool published = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
-                if (published)
-                {
-                    result.CoordinatesPublished = true;
-                    LogHelper.Info("Shared coordinate relationship established.");
-                }
-                else
-                {
-                    LogHelper.Info("Strategy A failed — model has correct coordinates from Strategy B " +
-                                   "but may not support 'By Shared Coordinates' linking.");
-                }
             }
             catch (Exception ex)
             {

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Autodesk.Revit.DB;
 using GeolocationAddin.Helpers;
 using GeolocationAddin.Models;
@@ -8,116 +9,9 @@ namespace GeolocationAddin.Core
     public static class CoordinatePublisher
     {
         /// <summary>
-        /// Strategy A: Relink the type to the copied file, publish coordinates, then restore.
-        /// This establishes a named shared coordinate position in the copy, enabling
+        /// Sets shared coordinates on the copied document (must be open as a primary document)
+        /// and creates a named ProjectLocation matching the site model to enable
         /// Revit's "By Shared Coordinates" linking between output models.
-        /// LoadFrom must be called outside any transaction. PublishCoordinates needs a transaction.
-        /// </summary>
-        public static bool PublishViaRelink(Document siteDoc, LinkInstanceInfo linkInfo)
-        {
-            var linkType = linkInfo.LinkType;
-            bool loadFromSucceeded = false;
-
-            try
-            {
-                // 1. Relink to the copied file (must be outside any transaction)
-                var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(linkInfo.TargetFilePath);
-                var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
-                linkType.LoadFrom(targetModelPath, worksetConfig);
-                loadFromSucceeded = true;
-
-                LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");
-
-                // 2. Get the linked document's active ProjectLocation — PublishCoordinates
-                //    needs a LinkElementId that identifies both the link instance and the
-                //    target ProjectLocation in the linked model.
-                var linkInstance = siteDoc.GetElement(linkInfo.InstanceId) as RevitLinkInstance;
-                if (linkInstance == null)
-                    throw new InvalidOperationException("Could not resolve RevitLinkInstance after LoadFrom.");
-
-                var linkDoc = linkInstance.GetLinkDocument();
-                if (linkDoc == null)
-                    throw new InvalidOperationException("GetLinkDocument() returned null — linked model not loaded.");
-
-                var linkedLocation = linkDoc.ActiveProjectLocation;
-                LogHelper.Info($"Linked doc active location: '{linkedLocation.Name}' (Id={linkedLocation.Id})");
-                LogHelper.Info($"Link instance Id={linkInfo.InstanceId}, type Id={linkInfo.TypeId}");
-
-                // 3. Publish shared coordinates (requires a transaction)
-                using (var tx = new Transaction(siteDoc, "Publish Coordinates"))
-                {
-                    tx.Start();
-
-                    // The two-arg constructor LinkElementId(linkInstanceId, linkedElementId) sets
-                    // LinkInstanceId and LinkedElementId — both are required by PublishCoordinates.
-                    var linkElementId = new LinkElementId(linkInfo.InstanceId, linkedLocation.Id);
-                    LogHelper.Info($"LinkElementId: HostElementId={linkElementId.HostElementId}, " +
-                                   $"LinkInstanceId={linkElementId.LinkInstanceId}, " +
-                                   $"LinkedElementId={linkElementId.LinkedElementId}");
-
-                    siteDoc.PublishCoordinates(linkElementId);
-
-                    tx.Commit();
-                }
-
-                // 4. Save the linked document to persist the published coordinates to disk.
-                // PublishCoordinates modifies the linked doc in memory (adds a named position),
-                // but Reload() will discard those changes unless we save first.
-                try
-                {
-                    linkDoc.Save();
-                    LogHelper.Info("Saved linked document with published coordinates.");
-                }
-                catch (Exception saveEx)
-                {
-                    LogHelper.Info($"linkDoc.Save() failed ({saveEx.Message}), trying SaveAs...");
-                    try
-                    {
-                        var saveAsOpts = new SaveAsOptions { OverwriteExistingFile = true, MaximumBackups = 1 };
-                        if (linkDoc.IsWorkshared)
-                        {
-                            var wsOpts = new WorksharingSaveAsOptions { SaveAsCentral = true };
-                            saveAsOpts.SetWorksharingOptions(wsOpts);
-                        }
-                        linkDoc.SaveAs(linkInfo.TargetFilePath, saveAsOpts);
-                        LogHelper.Info("SaveAs linked document with published coordinates.");
-                    }
-                    catch (Exception saveAsEx)
-                    {
-                        LogHelper.Error($"Could not persist published coordinates: {saveAsEx.Message}");
-                    }
-                }
-
-                LogHelper.Info($"Published coordinates to: {linkInfo.TargetFileName}");
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogHelper.Error($"Strategy A failed for {linkInfo.TargetFileName}: {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                // 4. Restore original link — use Reload() for cloud links
-                if (loadFromSucceeded)
-                {
-                    try
-                    {
-                        linkType.Reload();
-                        LogHelper.Info("Restored original link via Reload().");
-                    }
-                    catch (Exception ex)
-                    {
-                        LogHelper.Error($"Failed to restore link: {ex.Message}");
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Strategy B: Extract transform from the link instance and combine with the site model's
-        /// survey position to compute absolute shared coordinates for the copied model.
         /// </summary>
         public static bool PublishViaTransform(Document siteDoc, Document copiedDoc, Transform linkTransform)
         {
@@ -152,29 +46,46 @@ namespace GeolocationAddin.Core
                 LogHelper.Info($"Absolute coordinates: E={absoluteEasting:F4}, N={absoluteNorthing:F4}, " +
                                $"Elev={absoluteElevation:F4}, Angle={absoluteAngle:F6} rad");
 
+                var position = new ProjectPosition(
+                    absoluteEasting,
+                    absoluteNorthing,
+                    absoluteElevation,
+                    absoluteAngle
+                );
+
                 using (var tx = new Transaction(copiedDoc, "Set Shared Coordinates"))
                 {
                     tx.Start();
 
+                    // 1. Set coordinates on the active (Internal) location
                     var projectLocation = copiedDoc.ActiveProjectLocation;
-                    var position = new ProjectPosition(
-                        absoluteEasting,    // easting in feet
-                        absoluteNorthing,   // northing in feet
-                        absoluteElevation,  // elevation in feet
-                        absoluteAngle       // angle from true north
-                    );
-
                     projectLocation.SetProjectPosition(XYZ.Zero, position);
+
+                    // 2. Create a named ProjectLocation matching the site model.
+                    //    This enables "By Shared Coordinates" linking — Revit matches
+                    //    position names across models. All copies get the same name
+                    //    from the site model, so they can link to each other.
+                    try
+                    {
+                        string siteName = Path.GetFileNameWithoutExtension(siteDoc.Title);
+                        var namedLocation = ProjectLocation.Create(copiedDoc, copiedDoc.SiteLocation, siteName);
+                        namedLocation.SetProjectPosition(XYZ.Zero, position);
+                        LogHelper.Info($"Created named shared position: '{siteName}'");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogHelper.Info($"Could not create named position: {ex.Message}");
+                    }
 
                     tx.Commit();
                 }
 
-                LogHelper.Info("Applied transform-based coordinates (Strategy B).");
+                LogHelper.Info("Applied shared coordinates.");
                 return true;
             }
             catch (Exception ex)
             {
-                LogHelper.Error($"Strategy B failed: {ex.Message}");
+                LogHelper.Error($"Coordinate publishing failed: {ex.Message}");
                 return false;
             }
         }
