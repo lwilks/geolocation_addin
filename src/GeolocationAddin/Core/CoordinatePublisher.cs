@@ -20,7 +20,8 @@ namespace GeolocationAddin.Core
             {
                 // 1. Relink to the copied file (must be outside any transaction)
                 var targetModelPath = ModelPathUtils.ConvertUserVisiblePathToModelPath(linkInfo.TargetFilePath);
-                linkType.LoadFrom(targetModelPath, new WorksetConfiguration());
+                var worksetConfig = new WorksetConfiguration(WorksetConfigurationOption.OpenAllWorksets);
+                linkType.LoadFrom(targetModelPath, worksetConfig);
                 loadFromSucceeded = true;
 
                 LogHelper.Info($"Relinked type to: {linkInfo.TargetFilePath}");

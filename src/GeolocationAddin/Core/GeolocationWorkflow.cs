@@ -99,35 +99,13 @@ namespace GeolocationAddin.Core
             // 7. Group by RevitLinkType for coordinate publishing
             var typeGroups = linkInfos.GroupBy(li => li.TypeId.Value);
 
-            Document pendingCloseDoc = null;
-
             foreach (var group in typeGroups)
             {
                 foreach (var linkInfo in group)
                 {
-                    Document previousPending = pendingCloseDoc;
-                    pendingCloseDoc = null;
-
-                    var result = ProcessLink(siteDoc, linkInfo, out Document exportDoc);
+                    var result = ProcessLink(siteDoc, linkInfo);
                     results.Add(result);
-
-                    if (previousPending != null)
-                    {
-                        try { previousPending.Close(false); }
-                        catch (Exception ex) { LogHelper.Info($"Deferred close failed: {ex.Message}"); }
-                    }
-
-                    if (exportDoc != null)
-                        pendingCloseDoc = exportDoc;
                 }
-            }
-
-            // Close the last export doc by switching back to the site doc first
-            if (pendingCloseDoc != null)
-            {
-                RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
-                try { pendingCloseDoc.Close(false); }
-                catch (Exception ex) { LogHelper.Info($"Final close failed: {ex.Message}"); }
             }
 
             // 8. Show summary
@@ -323,9 +301,8 @@ namespace GeolocationAddin.Core
             return linkInfos;
         }
 
-        private ProcessingResult ProcessLink(Document siteDoc, LinkInstanceInfo linkInfo, out Document openedDoc)
+        private ProcessingResult ProcessLink(Document siteDoc, LinkInstanceInfo linkInfo)
         {
-            openedDoc = null;
             var result = new ProcessingResult
             {
                 LinkName = linkInfo.InstanceName,
@@ -355,9 +332,10 @@ namespace GeolocationAddin.Core
                 Directory.CreateDirectory(resolvedDwgFolder);
 
             Document exportDoc = null;
-            bool isCloudDoc = false;
             try
             {
+                // === Phase 1: Create the local copy ===
+                bool isCloudDoc = false;
                 if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
                 {
                     LogHelper.Info("Opening via cloud GUIDs (detached)...");
@@ -380,12 +358,32 @@ namespace GeolocationAddin.Core
                 result.CopySucceeded = true;
                 LogHelper.Info("SaveAs completed — clean local copy created.");
 
-                result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
-                    siteDoc, exportDoc, linkInfo.TotalTransform);
+                // === Phase 2: Close copy so Strategy A can relink to it ===
+                if (isCloudDoc)
+                    RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+
+                exportDoc.Close(false);
+                exportDoc = null;
+                LogHelper.Info("Closed copy for coordinate publishing.");
+
+                // === Phase 3: Publish coordinates via Strategy A (native PublishCoordinates) ===
+                result.CoordinatesPublished = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
+
+                // === Phase 4: Reopen local copy for export (and Strategy B fallback) ===
+                exportDoc = RevitDocumentHelper.OpenDocumentDetached(_uiApp, linkInfo.TargetFilePath);
+                LogHelper.Info("Reopened local copy for export.");
 
                 if (!result.CoordinatesPublished)
-                    LogHelper.Error("Failed to apply coordinates (Strategy B).");
+                {
+                    LogHelper.Info("Strategy A failed — falling back to Strategy B (transform).");
+                    result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
+                        siteDoc, exportDoc, linkInfo.TotalTransform);
 
+                    if (!result.CoordinatesPublished)
+                        LogHelper.Error("Both coordinate strategies failed.");
+                }
+
+                // === Phase 5: Export ===
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
@@ -400,15 +398,8 @@ namespace GeolocationAddin.Core
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");
 
-                if (isCloudDoc)
-                {
-                    openedDoc = exportDoc;
-                }
-                else
-                {
-                    exportDoc.Close(false);
-                    exportDoc = null;
-                }
+                exportDoc.Close(false);
+                exportDoc = null;
             }
             catch (Exception ex)
             {
@@ -416,10 +407,7 @@ namespace GeolocationAddin.Core
                 LogHelper.Error(result.ErrorMessage);
                 if (exportDoc != null)
                 {
-                    if (isCloudDoc)
-                        openedDoc = exportDoc;
-                    else
-                        try { exportDoc.Close(false); } catch { }
+                    try { exportDoc.Close(false); } catch { }
                 }
             }
 
