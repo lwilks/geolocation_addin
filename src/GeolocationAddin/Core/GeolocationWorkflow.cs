@@ -332,10 +332,10 @@ namespace GeolocationAddin.Core
                 Directory.CreateDirectory(resolvedDwgFolder);
 
             Document exportDoc = null;
+            bool isCloudDoc = false;
             try
             {
                 // === Phase 1: Create the local copy ===
-                bool isCloudDoc = false;
                 if (linkInfo.CloudProjectGuid.HasValue && linkInfo.CloudModelGuid.HasValue)
                 {
                     LogHelper.Info("Opening via cloud GUIDs (detached)...");
@@ -358,34 +358,18 @@ namespace GeolocationAddin.Core
                 result.CopySucceeded = true;
                 LogHelper.Info("SaveAs completed — clean local copy created.");
 
-                // === Phase 2: Close copy so Strategy A can relink to it ===
-                if (isCloudDoc)
-                    RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
-
-                exportDoc.Close(false);
-                exportDoc = null;
-                LogHelper.Info("Closed copy for coordinate publishing.");
-
-                // === Phase 3: Publish coordinates via Strategy A (native PublishCoordinates) ===
-                result.CoordinatesPublished = CoordinatePublisher.PublishViaRelink(siteDoc, linkInfo);
-
-                // === Phase 4: Reopen local copy for export (and Strategy B fallback) ===
-                // Must use OpenAndActivateDocument — Application.OpenDocumentFile can return
-                // the cached linked document after LoadFrom/Reload instead of a primary document.
-                exportDoc = RevitDocumentHelper.OpenDocumentDetachedAsActive(_uiApp, linkInfo.TargetFilePath);
-                LogHelper.Info("Reopened local copy for export.");
+                // === Phase 2: Set shared coordinates on the still-open primary document ===
+                // The copy is still open as a primary doc after SaveAs — we can run transactions
+                // directly. This avoids the close→LoadFrom→PublishCoordinates→Reload→reopen
+                // cycle which fails because (a) LinkElementId constructor doesn't set LinkInstanceId
+                // for PublishCoordinates, and (b) reopening returns a cached linked document.
+                result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
+                    siteDoc, exportDoc, linkInfo.TotalTransform);
 
                 if (!result.CoordinatesPublished)
-                {
-                    LogHelper.Info("Strategy A failed — falling back to Strategy B (transform).");
-                    result.CoordinatesPublished = CoordinatePublisher.PublishViaTransform(
-                        siteDoc, exportDoc, linkInfo.TotalTransform);
+                    LogHelper.Error("Coordinate publishing failed.");
 
-                    if (!result.CoordinatesPublished)
-                        LogHelper.Error("Both coordinate strategies failed.");
-                }
-
-                // === Phase 5: Export ===
+                // === Phase 3: Export ===
                 var baseName = Path.GetFileNameWithoutExtension(targetFileName);
 
                 if (_config.ExportSettings.ExportIfc)
@@ -400,8 +384,11 @@ namespace GeolocationAddin.Core
                 RevitDocumentHelper.SaveDocumentAs(exportDoc, linkInfo.TargetFilePath);
                 LogHelper.Info("Final save completed.");
 
-                // Copy was opened via OpenAndActivateDocument — activate site doc before closing
-                RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+                // Cloud docs were opened via OpenAndActivateDocument — activate site doc first.
+                // Local docs were opened via OpenDocumentDetached (background) and can close directly.
+                if (isCloudDoc)
+                    RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+
                 exportDoc.Close(false);
                 exportDoc = null;
             }
@@ -413,7 +400,8 @@ namespace GeolocationAddin.Core
                 {
                     try
                     {
-                        RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
+                        if (isCloudDoc)
+                            RevitDocumentHelper.ActivateDocument(_uiApp, siteDoc);
                         exportDoc.Close(false);
                     }
                     catch { }
